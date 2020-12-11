@@ -1,0 +1,28 @@
+{
+  "mxGraphModel": {
+    "root": {
+      "mxCell": [
+        {
+          "id": "0"
+        },
+        {
+          "id": "1",
+          "parent": "0"
+        },
+        {
+          "id": "2",
+          "value": "",
+          "style": "shape=zenShape.gauge.speedometer;gaugePos=69.167;fillColor=none;fontColor=none;strokeColor=none;noLabel=1;aspect=fixed;percentage=69;",
+          "vertex": "1",
+          "parent": "1",
+          "mxGeometry": {
+            "x": "1.1368683772161603e-13",
+            "width": "80",
+            "height": "80",
+            "as": "geometry"
+          }
+        }
+      ]
+    }
+  }
+}

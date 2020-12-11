@@ -1,0 +1,27 @@
+{
+  "mxGraphModel": {
+    "root": {
+      "mxCell": [
+        {
+          "id": "0"
+        },
+        {
+          "id": "1",
+          "parent": "0"
+        },
+        {
+          "id": "2",
+          "value": "<span><font style=\"font-size: 91px\" color=\"#ffffff\">❌</font></span><br>",
+          "style": "ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#FF0000;strokeColor=none;shadow=0;fontColor=#000000;",
+          "vertex": "1",
+          "parent": "1",
+          "mxGeometry": {
+            "width": "80",
+            "height": "80",
+            "as": "geometry"
+          }
+        }
+      ]
+    }
+  }
+}

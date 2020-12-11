@@ -1,0 +1,27 @@
+{
+  "mxGraphModel": {
+    "root": {
+      "mxCell": [
+        {
+          "id": "0"
+        },
+        {
+          "id": "1",
+          "parent": "0"
+        },
+        {
+          "id": "2",
+          "value": "",
+          "style": "shape=image;verticalAlign=top;verticalLabelPosition=bottom;labelBackgroundColor=#ffffff;imageAspect=0;aspect=fixed;image=https://cdn3.iconfinder.com/data/icons/tango-icon-library/48/weather-severe-alert-128.png;fillColor=none;fontColor=none;noLabel=1;",
+          "vertex": "1",
+          "parent": "1",
+          "mxGeometry": {
+            "width": "80",
+            "height": "80",
+            "as": "geometry"
+          }
+        }
+      ]
+    }
+  }
+}

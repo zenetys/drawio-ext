@@ -1,0 +1,27 @@
+{
+  "mxGraphModel": {
+    "root": {
+      "mxCell": [
+        {
+          "id": "0"
+        },
+        {
+          "id": "1",
+          "parent": "0"
+        },
+        {
+          "id": "2",
+          "value": "",
+          "style": "shape=zenShape.gauge.linear;gaugeType=1;gaugePos=91.667;textColor=#000000;stagesNb=3;fillColor=none;fontColor=none;strokeColor=none;noLabel=1;percentage=91;",
+          "vertex": "1",
+          "parent": "1",
+          "mxGeometry": {
+            "width": "80",
+            "height": "80",
+            "as": "geometry"
+          }
+        }
+      ]
+    }
+  }
+}

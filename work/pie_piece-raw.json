@@ -1,0 +1,32 @@
+{
+  "mxGraphModel": {
+    "root": {
+      "mxCell": [
+        {
+          "id": "0"
+        },
+        {
+          "id": "1",
+          "parent": "0"
+        }
+      ],
+      "object": {
+        "label": "",
+        "placeholders": "1",
+        "test": "efefe",
+        "id": "2",
+        "mxCell": {
+          "style": "verticalLabelPosition=bottom;verticalAlign=top;html=1;shape=mxgraph.basic.pie;fillColor=#007FFF;strokeColor=none;startAngle=0;endAngle=0.69;fontColor=none;aspect=fixed;noLabel=1;",
+          "vertex": "1",
+          "parent": "1",
+          "mxGeometry": {
+            "x": "1.1368683772161603e-13",
+            "width": "80",
+            "height": "80",
+            "as": "geometry"
+          }
+        }
+      }
+    }
+  }
+}
