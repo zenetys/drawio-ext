@@ -13,6 +13,7 @@ Draw.loadPlugin(
       },
       ids: [],
       nodes: [],
+      timeout: 0,
       isInit: false,
       statusBar: {
         id: "liveStatusBar",
@@ -52,19 +53,8 @@ Draw.loadPlugin(
 
       /** "live-start" action handler */
       function startScheduleUpdate() {
-        const graph = ui.editor.getGraphXml();
-        const root = graph.firstChild;
-        const liveRefresh = +(root.firstChild.getAttribute(live.refresh));
-
-        console.log(liveRefresh, typeof liveRefresh)
-
         updateLiveStatus(live.statusBar.color.start);
-
         doUpdate();
-        live.thread = setInterval(
-          doUpdate,
-          liveRefresh
-        );
       };
 
       /** "live-pause" action handler */
@@ -78,6 +68,7 @@ Draw.loadPlugin(
         live.ids = [];
         live.nodes = [];
         live.isInit = false;
+        live.timeout = 0;
 
         startScheduleUpdate();
       };
@@ -156,11 +147,12 @@ Draw.loadPlugin(
 
     /** Performs an update process */
     function doUpdate() {
-      const graph = ui.editor.getGraphXml();      
+      live.thread = null;
+      const graph = ui.editor.getGraphXml();
+      const root = graph.firstChild;
 
       /** Computes the request to call the API according to the given uri */
-      function computeRequest(graph, uri) {
-        const root = graph.firstChild;
+      function computeRequest(uri) {
         const liveApi = root.firstChild.getAttribute(live.api);
 
         return uri.startsWith("http") ? uri     // absolute path
@@ -222,6 +214,7 @@ Draw.loadPlugin(
         live.ids = findLiveElementsIds(graph);
         live.nodes = storeLiveElements(graph, live.ids);
         live.isInit = true;
+        live.timeout = +(root.firstChild.getAttribute(live.refresh) + "000");
       }
 
       // initiates the xml doc to perform the updates
@@ -234,7 +227,7 @@ Draw.loadPlugin(
 
         for(const attribute of node.attributes) {
           const {name, value: apiEndpoint} = attribute;
-          const requestUrl = computeRequest(graph, apiEndpoint);
+          const requestUrl = computeRequest(apiEndpoint);
 
           // targets all live properties
           if(name.startsWith("live.")) {
@@ -281,6 +274,11 @@ Draw.loadPlugin(
       ui.updateDiagram(
         mxUtils.getXml(xmlUpdatesDoc)
       );
+
+      live.thread = setTimeout(
+        doUpdate,
+        live.timeout
+      )
     }
   }
 );
