@@ -2,6 +2,7 @@ Draw.loadPlugin(
   function(ui) {
     // stores live properties values
     const live = {
+      thread: null,
       api: "live.api",
       refresh: "live.refresh",
       style: "live.style",
@@ -12,132 +13,151 @@ Draw.loadPlugin(
       },
       ids: [],
       nodes: [],
-      thread: null,
       isInit: false,
+      statusBar: {
+        id: "liveStatusBar",
+        color: {
+          start: "lightgreen",
+          pause: "rgb(240, 135, 5)"
+        }
+      }
     }
 
-    displayLiveButtons();
+    addLiveActions();
+    addLiveUpdatePalette();
 
-    /** Builds & appends live controller buttons to the user window */
-    function displayLiveButtons() {
-      const targetSelector = ".geDiagramContainer";
-      const containerId = "live-buttons-section";
 
-      /** "Play" event listener */
-      function scheduleUpdates() {
+    /** Executes a binded action */
+    function executeAction(actionName) {
+      return function() {
+        ui.actions.actions[actionName].funct();
+      }
+    }
+
+    /** Adds live actions & handlers to the graph */
+    function addLiveActions() {
+      addLiveAction("live-start",   startScheduleUpdate);
+      addLiveAction("live-pause",   pauseScheduleUpdate);
+      addLiveAction("live-restart", restartScheduleUpdate);
+
+      function addLiveAction(actionName, handler) {
+        ui.actions.addAction(actionName, handler)
+      }
+
+      /** Updates status bar color according to the current state */
+      function updateLiveStatus(color) {
+        const liveStatusBar = document.getElementById(live.statusBar.id);
+        liveStatusBar.style.backgroundColor = color;
+      }
+
+      /** "live-start" action handler */
+      function startScheduleUpdate() {
         const graph = ui.editor.getGraphXml();
         const root = graph.firstChild;
-        const liveRefresh = +root.firstChild.getAttribute(live.refresh);
+        const liveRefresh = +(root.firstChild.getAttribute(live.refresh));
 
-        styleContainerBg("lightgreen");
+        console.log(liveRefresh, typeof liveRefresh)
+
+        updateLiveStatus(live.statusBar.color.start);
 
         doUpdate();
         live.thread = setInterval(
-          () => doUpdate(),
+          doUpdate,
           liveRefresh
         );
       };
 
-      /** "Pause" event listener */
-      function pauseSchedule() {
-        styleContainerBg("orange");
+      /** "live-pause" action handler */
+      function pauseScheduleUpdate() {
+        updateLiveStatus(live.statusBar.color.pause);
         clearInterval(live.thread);
       }
 
-      /** "Restart" event listener */
-      function restartSchedule() {
+      /** "live-restart" action handler */
+      function restartScheduleUpdate() {
         live.ids = [];
         live.nodes = [];
         live.isInit = false;
 
-        scheduleUpdates();
+        startScheduleUpdate();
       };
-
-      /** Changes container bg color according to live state */
-      function styleContainerBg(bgColor) {
-        const container = document.getElementById(containerId);
-        container.style.backgroundColor = bgColor;
-      }
-
-      /** Builds a live button to append to the container */
-      function buildHtmlElement(type, text = null, onClickCallback = null, style, isContainer = false) {
-        const htmlItem = document.createElement(type);
-        
-        if(isContainer) {
-          htmlItem.setAttribute("id", containerId);
-          const styleParams = Object.keys(style);
-          
-          for(const param of styleParams) {
-            htmlItem.style[param] = style[param];
-          }
-        }
-        else {
-          if(text) htmlItem.innerText = text;
-          if(onClickCallback) htmlItem.addEventListener(
-            "click",
-            onClickCallback
-          );
-
-          htmlItem.style.width = "30px";
-          htmlItem.style.height = "30px";
-          htmlItem.style.fontSize = "30px";
-          htmlItem.style.textAlign = "left";
-          htmlItem.style.padding = "0px";
-          htmlItem.style.margin = "0px";
-          htmlItem.style.cursor = "pointer";
-        }
-
-        return htmlItem;
-      }
-
-      const liveContainer = buildHtmlElement(
-        "section", 
-        null, 
-        null, {
-          position: "fixed",
-          margin: "10px",
-          borderRadius: "7px",
-          left: "calc(50% - 90px)",
-          width: "180px",
-          height: "50px",
-          backgroundColor: "orange",        
-          display: "flex",
-          flexDirection: "row",
-          justifyContent: "space-around",
-          alignItems: "center",      
-        },
-        true
-      );
-
-      const playButton = buildHtmlElement(
-        "div",
-        "🔛",
-        scheduleUpdates
-      );
-
-      const pauseButton = buildHtmlElement(
-        "div",
-        "⏸",
-        pauseSchedule
-      );
-
-      const resetButton = buildHtmlElement(
-        "div", 
-        "↻",
-        restartSchedule
-      );
-
-      // appends html elemts to the container & to the DOM
-      liveContainer.appendChild(playButton);
-      liveContainer.appendChild(pauseButton);
-      liveContainer.appendChild(resetButton);
-      const graphContainer = document.querySelector(targetSelector);
-      graphContainer.appendChild(liveContainer);
     }
 
+    /** Adds a new palette with buttons to handle the live state in the sidebar */
+    function addLiveUpdatePalette() {
+      if(ui.sidebar !== null) {
+        const sidebarContainer = ui.sidebar.container;
+  
+        ui.sidebar.addPalette(
+          "liveUpdate",
+          "Live Update",
+          true,
+          function(palette) {
+            function createLiveButton(text, actionName) {
+              const liveButton = document.createElement('div');
+              liveButton.innerText = text;
+              liveButton.style.width = "25%";
+              liveButton.style.textAlign = "center";
+              liveButton.style.cursor = "pointer";
+              liveButton.style.verticalAlign = "center";
+              liveButton.style.padding = "5px";
+              liveButton.style.margin = "0";
+              liveButton.style.borderRadius = "5px";
+              liveButton.style.border = "1px solid #aaa";
+              
+              const liveEvent = mxEvent.addListener(
+                liveButton,
+                (mxClient.IS_POINTER) ? "pointerup" : "mouseup",
+                executeAction(actionName)
+              );
+
+              mxEvent.addListener(liveButton, mxWindow.CLOSE, function() {
+                mxEvent.removeListener(liveEvent);
+              })
+  
+              return liveButton;
+            }
+  
+            const liveButtonsContainer = document.createElement("div");
+            liveButtonsContainer.style.display = "flex";
+            liveButtonsContainer.style.justifyContent = "space-around";
+  
+            const startButton = createLiveButton("Play", "live-start");
+            const pauseButton = createLiveButton("Pause", "live-pause");
+            const restartButton = createLiveButton("Restart", "live-restart");
+  
+            liveButtonsContainer.appendChild(startButton);
+            liveButtonsContainer.appendChild(pauseButton);
+            liveButtonsContainer.appendChild(restartButton);
+            palette.appendChild(liveButtonsContainer);
+  
+            const statusBarId = live.statusBar.id;
+            const liveStatusBar = document.createElement("div");
+            liveStatusBar.style.width = "100%";
+            liveStatusBar.style.height = "7px";
+            liveStatusBar.style.marginTop = "3px";
+            liveStatusBar.style.backgroundColor = live.statusBar.color.pause;
+            liveStatusBar.id = statusBarId;
+            palette.appendChild(liveStatusBar);
+          }
+        );
+  
+        // sets the new palette & its content to the top of the sidebar
+        sidebarContainer.insertBefore(
+          sidebarContainer.lastChild, 
+          sidebarContainer.firstChild
+        );
+        sidebarContainer.insertBefore(
+          sidebarContainer.lastChild, 
+          sidebarContainer.firstChild
+        );
+      } 
+    }
 
     /** Performs an update process */
     function doUpdate() {
+      const graph = ui.editor.getGraphXml();      
+
       /** Computes the request to call the API according to the given uri */
       function computeRequest(graph, uri) {
         const root = graph.firstChild;
@@ -148,7 +168,7 @@ Draw.loadPlugin(
         : null;                                 // error
       }
 
-      /** checks reccursively in xml tree if nodes are live ones & stores live nodes ids */ 
+      /** Checks recursively in xml tree if nodes are live ones & stores live nodes ids */
       function findLiveElementsIds(graphElement, idsList = []) {
         // node with id === 0 is not checked
         if(graphElement.getAttribute("id") !== "0") {
@@ -197,9 +217,7 @@ Draw.loadPlugin(
         return output;
       }
 
-      const graph = ui.editor.getGraphXml();
-
-      // when init or restart
+      // when inits or restarts
       if(!live.isInit) {
         live.ids = findLiveElementsIds(graph);
         live.nodes = storeLiveElements(graph, live.ids);
