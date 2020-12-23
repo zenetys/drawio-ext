@@ -21,7 +21,8 @@ Draw.loadPlugin(
           start: "lightgreen",
           pause: "rgb(240, 135, 5)"
         }
-      }
+      },
+      graphId: ""
     }
 
     addLiveActions();
@@ -35,6 +36,39 @@ Draw.loadPlugin(
       }
     }
 
+    /** Updates status bar color according to the current state */
+    function updateLiveStatus(color) {
+      const liveStatusBar = document.getElementById(live.statusBar.id);
+      liveStatusBar.style.backgroundColor = color;
+    }
+
+    /** "live-start" action handler */
+    function startScheduleUpdate() {
+      updateLiveStatus(live.statusBar.color.start);
+      doUpdate();
+    };
+
+    /** "live-pause" action handler */
+    function pauseScheduleUpdate() {
+      updateLiveStatus(live.statusBar.color.pause);
+      clearInterval(live.thread);
+    }
+
+    /** Resets live update parameters */
+    function resetScheduleUpdate() {
+      live.ids = [];
+      live.nodes = [];
+      live.isInit = false;
+      live.timeout = 0;
+      live.graphId = "";
+      updateLiveStatus(live.statusBar.color.pause);
+    }
+    /** "live-restart" action handler */
+    function restartScheduleUpdate() {
+      resetScheduleUpdate();
+      startScheduleUpdate();
+    }
+
     /** Adds live actions & handlers to the graph */
     function addLiveActions() {
       addLiveAction("live-start",   startScheduleUpdate);
@@ -44,34 +78,6 @@ Draw.loadPlugin(
       function addLiveAction(actionName, handler) {
         ui.actions.addAction(actionName, handler)
       }
-
-      /** Updates status bar color according to the current state */
-      function updateLiveStatus(color) {
-        const liveStatusBar = document.getElementById(live.statusBar.id);
-        liveStatusBar.style.backgroundColor = color;
-      }
-
-      /** "live-start" action handler */
-      function startScheduleUpdate() {
-        updateLiveStatus(live.statusBar.color.start);
-        doUpdate();
-      };
-
-      /** "live-pause" action handler */
-      function pauseScheduleUpdate() {
-        updateLiveStatus(live.statusBar.color.pause);
-        clearInterval(live.thread);
-      }
-
-      /** "live-restart" action handler */
-      function restartScheduleUpdate() {
-        live.ids = [];
-        live.nodes = [];
-        live.isInit = false;
-        live.timeout = 0;
-
-        startScheduleUpdate();
-      };
     }
 
     /** Adds a new palette with buttons to handle the live state in the sidebar */
@@ -215,6 +221,7 @@ Draw.loadPlugin(
         live.nodes = storeLiveElements(graph, live.ids);
         live.isInit = true;
         live.timeout = +(root.firstChild.getAttribute(live.refresh) + "000");
+        live.graphId = ui.currentPage.node.id;
       }
 
       // initiates the xml doc to perform the updates
@@ -270,15 +277,22 @@ Draw.loadPlugin(
       }
 
       // appends "updates" node to the new doc & updates diagram with it
-      xmlUpdatesDoc.appendChild(status);
-      ui.updateDiagram(
-        mxUtils.getXml(xmlUpdatesDoc)
-      );
 
-      live.thread = setTimeout(
-        doUpdate,
-        live.timeout
-      )
+      if(ui.currentPage.node.id === live.graphId) {
+
+        xmlUpdatesDoc.appendChild(status);
+        ui.updateDiagram(
+          mxUtils.getXml(xmlUpdatesDoc)
+        );
+  
+        live.thread = setTimeout(
+          doUpdate,
+          live.timeout
+        );
+      }
+      else {
+        resetScheduleUpdate();
+      }
     }
   }
 );
