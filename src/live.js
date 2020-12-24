@@ -229,8 +229,9 @@ Draw.loadPlugin(
       const status = xmlUpdatesDoc.createElement("updates");
   
       for(const {node, id} of live.nodes) {
-        let style = "";
         let label = "";
+        let inputStyle = node.childNodes[0].getAttribute("style");
+        let outputStyle = "";
 
         for(const attribute of node.attributes) {
           const {name, value: apiEndpoint} = attribute;
@@ -247,15 +248,15 @@ Draw.loadPlugin(
                 .replace(/"/g, "")
                 .trim();
 
-                name === live.text ? label += `<object label="${parsedResponse}"/>`
-                : style += (name === live.style) ? parsedResponse
-                : `${
-                  name.slice(
-                    live.property.getName(name)
-                  )
-                }:${parsedResponse};`;
+                if(name === live.text) {
+                  label = `<object label="${parsedResponse}"/>`;
+                } else {
+                  // const receivedStyle = parseStyle(parsedResponse);
+                  outputStyle = name === live.style
+                  ? parsedResponse
+                  : inputStyle + `${live.property.getName(name)}=${parsedResponse.slice(1)};`;
+                }
               }
-
             }
             catch(e) {
               console.log(`Error while fetching data from ${requestUrl}: ${e}`);
@@ -265,9 +266,10 @@ Draw.loadPlugin(
         // sets fetched data in a update xml node & appends to "updates" node
         const updateNode = xmlUpdatesDoc.createElement("update");
         updateNode.setAttribute("id", id);
-        style && updateNode.setAttribute(
+        outputStyle && updateNode.setAttribute(
           "style", 
-          style
+          // parseStyle(outputStyle)
+          outputStyle
         );
         label && updateNode.setAttribute(
           "value", 
