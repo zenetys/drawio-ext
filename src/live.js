@@ -44,28 +44,36 @@ Draw.loadPlugin(
 
     /** "live-start" action handler */
     function startScheduleUpdate() {
-      updateLiveStatus(live.statusBar.color.start);
-      doUpdate();
+      if(live.thread === null) {
+        updateLiveStatus(live.statusBar.color.start);
+        doUpdate();
+      } else {
+        console.log("live thread already running");
+      }
     };
 
     /** "live-pause" action handler */
     function pauseScheduleUpdate() {
       updateLiveStatus(live.statusBar.color.pause);
       clearInterval(live.thread);
+      live.thread = null;
     }
 
     /** Resets live update parameters */
-    function resetScheduleUpdate() {
+    function resetScheduleUpdate(isRestart = false) {
       live.ids = [];
       live.nodes = [];
       live.isInit = false;
       live.timeout = 0;
       live.graphId = "";
-      updateLiveStatus(live.statusBar.color.pause);
+      live.thread = null;
+      if (!isRestart) {
+        updateLiveStatus(live.statusBar.color.pause);
+      }
     }
     /** "live-restart" action handler */
     function restartScheduleUpdate() {
-      resetScheduleUpdate();
+      resetScheduleUpdate(true);
       startScheduleUpdate();
     }
 
