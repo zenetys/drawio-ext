@@ -15,31 +15,45 @@ Draw.loadPlugin(
       nodes: [],
       timeout: 0,
       isInit: false,
-      statusBar: {
-        id: "liveStatusBar",
-        color: {
-          start: "lightgreen",
-          pause: "rgb(240, 135, 5)"
-        }
-      },
       graphId: ""
-    }
+    };
 
-    addLiveActions();
     addLiveUpdatePalette();
 
-
-    /** Executes a binded action */
-    function executeAction(actionName) {
-      return function() {
-        ui.actions.actions[actionName].funct();
+    /** Adds a new palette with buttons to handle the live state in the toolbar */
+    function addLiveUpdatePalette() {
+      if(!ui.toolbar) {
+        log("Toolbar doesn't exist. Plugin is inactive...")
       }
-    }
+      else {
+        function addLiveButton(...buttons) {
+          for(const button of buttons) {
+            ui.toolbar.addMenuFunction(
+              button.label,
+              button.tooltip,
+              true,
+              button.funct,
+              ui.toolbar.container
+            );
+          }
+        }
 
-    /** Updates status bar color according to the current state */
-    function updateLiveStatus(color) {
-      const liveStatusBar = document.getElementById(live.statusBar.id);
-      liveStatusBar.style.backgroundColor = color;
+        ui.toolbar.addSeparator();
+        addLiveButton({
+          label: "⏺︎",
+          tooltip: "Start graph live update",
+          funct: startScheduleUpdate
+        },{
+          label: "⏸",
+          tooltip: "Stop graph live update",
+          funct: pauseScheduleUpdate
+        },{
+          label: "🔄",
+          tooltip: "Reload current graph & start live update",
+          funct: restartScheduleUpdate
+        });
+        ui.toolbar.addSeparator();
+      }
     }
 
     /** Stops refresh process & prevents multiple threads */
@@ -51,16 +65,14 @@ Draw.loadPlugin(
     /** "live-start" action handler */
     function startScheduleUpdate() {
       if(live.thread === null) {
-        updateLiveStatus(live.statusBar.color.start);
         doUpdate();
       } else {
-        console.log("live thread already running - thread id:", live.thread);
+        log("live thread already running - thread id:", live.thread);
       }
     };
 
     /** "live-pause" action handler */
     function pauseScheduleUpdate() {
-      updateLiveStatus(live.statusBar.color.pause);
       clearThread(live.thread);
     }
 
@@ -72,96 +84,13 @@ Draw.loadPlugin(
       live.timeout = 0;
       live.graphId = "";
       clearThread(live.thread);
-      if (!isRestart) {
-        updateLiveStatus(live.statusBar.color.pause);
-      }
+
     }
+
     /** "live-restart" action handler */
     function restartScheduleUpdate() {
-      resetScheduleUpdate(true);
+      resetScheduleUpdate();
       startScheduleUpdate();
-    }
-
-    /** Adds live actions & handlers to the graph */
-    function addLiveActions() {
-      addLiveAction("live-start",   startScheduleUpdate);
-      addLiveAction("live-pause",   pauseScheduleUpdate);
-      addLiveAction("live-restart", restartScheduleUpdate);
-
-      function addLiveAction(actionName, handler) {
-        ui.actions.addAction(actionName, handler)
-      }
-    }
-
-    /** Adds a new palette with buttons to handle the live state in the sidebar */
-    function addLiveUpdatePalette() {
-      if(ui.sidebar !== null) {
-        const sidebarContainer = ui.sidebar.container;
-  
-        ui.sidebar.addPalette(
-          "liveUpdate",
-          "Live Update",
-          true,
-          function(palette) {
-            function createLiveButton(text, actionName) {
-              const liveButton = document.createElement('div');
-              liveButton.innerText = text;
-              liveButton.style.width = "25%";
-              liveButton.style.textAlign = "center";
-              liveButton.style.cursor = "pointer";
-              liveButton.style.verticalAlign = "center";
-              liveButton.style.padding = "5px";
-              liveButton.style.margin = "0";
-              liveButton.style.borderRadius = "5px";
-              liveButton.style.border = "1px solid #aaa";
-              
-              const liveEvent = mxEvent.addListener(
-                liveButton,
-                (mxClient.IS_POINTER) ? "pointerup" : "mouseup",
-                executeAction(actionName)
-              );
-
-              mxEvent.addListener(liveButton, mxWindow.CLOSE, function() {
-                mxEvent.removeListener(liveEvent);
-              })
-  
-              return liveButton;
-            }
-  
-            const liveButtonsContainer = document.createElement("div");
-            liveButtonsContainer.style.display = "flex";
-            liveButtonsContainer.style.justifyContent = "space-around";
-  
-            const startButton = createLiveButton("Play", "live-start");
-            const pauseButton = createLiveButton("Pause", "live-pause");
-            const restartButton = createLiveButton("Restart", "live-restart");
-  
-            liveButtonsContainer.appendChild(startButton);
-            liveButtonsContainer.appendChild(pauseButton);
-            liveButtonsContainer.appendChild(restartButton);
-            palette.appendChild(liveButtonsContainer);
-  
-            const statusBarId = live.statusBar.id;
-            const liveStatusBar = document.createElement("div");
-            liveStatusBar.style.width = "100%";
-            liveStatusBar.style.height = "7px";
-            liveStatusBar.style.marginTop = "3px";
-            liveStatusBar.style.backgroundColor = live.statusBar.color.pause;
-            liveStatusBar.id = statusBarId;
-            palette.appendChild(liveStatusBar);
-          }
-        );
-  
-        // sets the new palette & its content to the top of the sidebar
-        sidebarContainer.insertBefore(
-          sidebarContainer.lastChild, 
-          sidebarContainer.firstChild
-        );
-        sidebarContainer.insertBefore(
-          sidebarContainer.lastChild, 
-          sidebarContainer.firstChild
-        );
-      } 
     }
 
     /** Performs an update process */
@@ -283,7 +212,7 @@ Draw.loadPlugin(
               }
             }
             catch(e) {
-              console.log(`Error while fetching data from ${requestUrl}: ${e}`);
+              log(`Error while fetching data from ${requestUrl}: ${e}`);
             }
           }
         }
@@ -304,8 +233,13 @@ Draw.loadPlugin(
         );
       }
       else {
+        log("live update plugin: Page changed, plugin stopped");
         resetScheduleUpdate();
       }
+    }
+
+    function log(text) {
+      console.log("liveUpdate plugin:", text);
     }
   }
 );
