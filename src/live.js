@@ -42,21 +42,26 @@ Draw.loadPlugin(
       liveStatusBar.style.backgroundColor = color;
     }
 
+    /** Stops refresh process & prevents multiple threads */
+    function clearThread(threadId) {
+      clearTimeout(threadId);
+      live.thread = null;
+    }
+
     /** "live-start" action handler */
     function startScheduleUpdate() {
       if(live.thread === null) {
         updateLiveStatus(live.statusBar.color.start);
         doUpdate();
       } else {
-        console.log("live thread already running");
+        console.log("live thread already running - thread id:", live.thread);
       }
     };
 
     /** "live-pause" action handler */
     function pauseScheduleUpdate() {
       updateLiveStatus(live.statusBar.color.pause);
-      clearInterval(live.thread);
-      live.thread = null;
+      clearThread(live.thread);
     }
 
     /** Resets live update parameters */
@@ -66,7 +71,7 @@ Draw.loadPlugin(
       live.isInit = false;
       live.timeout = 0;
       live.graphId = "";
-      live.thread = null;
+      clearThread(live.thread);
       if (!isRestart) {
         updateLiveStatus(live.statusBar.color.pause);
       }
@@ -161,7 +166,7 @@ Draw.loadPlugin(
 
     /** Performs an update process */
     function doUpdate() {
-      live.thread = null;
+      clearThread(live.thread);
       const graph = ui.editor.getGraphXml();
       const root = graph.firstChild;
 
@@ -212,7 +217,7 @@ Draw.loadPlugin(
       function storeLiveElements(graph, ids) {
         const output = [];
         for(const elementId of ids) {
-          const liveElement = graph.querySelector(`[id=${elementId}]`);
+          const liveElement = graph.querySelector(`[id="${elementId}"]`);
           if(liveElement) {
             output.push({
               id: elementId,
@@ -237,9 +242,10 @@ Draw.loadPlugin(
       const status = xmlUpdatesDoc.createElement("updates");
   
       for(const {node, id} of live.nodes) {
-        let label = "";
         let inputStyle = node.childNodes[0].getAttribute("style");
-        let outputStyle = "";
+
+        const updateNode = xmlUpdatesDoc.createElement("update");
+        updateNode.setAttribute("id", id);
 
         for(const attribute of node.attributes) {
           const {name, value: apiEndpoint} = attribute;
@@ -257,12 +263,22 @@ Draw.loadPlugin(
                 .trim();
 
                 if(name === live.text) {
-                  label = `<object label="${parsedResponse}"/>`;
+                  updateNode.setAttribute(
+                    "value", 
+                    `<object label="${parsedResponse}"/>`
+                  );
+                } else if (name === live.style) {
+                  updateNode.setAttribute(
+                    "style", 
+                    parsedResponse
+                  );
                 } else {
-                  // const receivedStyle = parseStyle(parsedResponse);
-                  outputStyle = name === live.style
-                  ? parsedResponse
-                  : inputStyle + `${live.property.getName(name)}=${parsedResponse.slice(1)};`;
+                  inputStyle = mxUtils.setStyle(
+                    inputStyle, 
+                    live.property.getName(name), 
+                    parsedResponse
+                  );
+                  updateNode.setAttribute("style", inputStyle);
                 }
               }
             }
@@ -271,30 +287,17 @@ Draw.loadPlugin(
             }
           }
         }
-        // sets fetched data in a update xml node & appends to "updates" node
-        const updateNode = xmlUpdatesDoc.createElement("update");
-        updateNode.setAttribute("id", id);
-        outputStyle && updateNode.setAttribute(
-          "style", 
-          // parseStyle(outputStyle)
-          outputStyle
-        );
-        label && updateNode.setAttribute(
-          "value", 
-          label
-        );   
         status.appendChild(updateNode);
       }
 
       // appends "updates" node to the new doc & updates diagram with it
-
       if(ui.currentPage.node.id === live.graphId) {
 
         xmlUpdatesDoc.appendChild(status);
         ui.updateDiagram(
           mxUtils.getXml(xmlUpdatesDoc)
         );
-  
+
         live.thread = setTimeout(
           doUpdate,
           live.timeout
