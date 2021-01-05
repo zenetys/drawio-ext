@@ -244,21 +244,11 @@ Draw.loadPlugin(
                 .trim();
 
                 if(name === live.text) {
-                  updateNode.setAttribute(
-                    "value", 
-                    `<object label="${parsedResponse}"/>`
-                  );
+                  updateNode.setAttribute("value", `<object label="${parsedResponse}"/>`);
                 } else if (name === live.style) {
-                  updateNode.setAttribute(
-                    "style", 
-                    parsedResponse
-                  );
+                  updateNode.setAttribute("style", parsedResponse);
                 } else {
-                  inputStyle = mxUtils.setStyle(
-                    inputStyle, 
-                    live.property.getName(name), 
-                    parsedResponse
-                  );
+                  inputStyle = mxUtils.setStyle(inputStyle, live.property.getName(name), parsedResponse);
                   updateNode.setAttribute("style", inputStyle);
                 }
               }
