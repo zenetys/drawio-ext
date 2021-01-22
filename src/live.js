@@ -63,11 +63,10 @@ Draw.loadPlugin(
         prefix: "live.property.",
         getName: (fullPropName) => fullPropName.slice("live.property.".length)
       },
-      ids: [],
       nodes: [],
       timeout: 0,
       isInit: false,
-      graphId: ""
+      graphPageId: ""
     };
 
     addLiveUpdatePalette();
@@ -134,7 +133,7 @@ Draw.loadPlugin(
       live.nodes = [];
       live.isInit = false;
       live.timeout = 0;
-      live.graphId = "";
+      live.graphPageId = "";
       clearThread(live.thread);
 
     }
@@ -151,130 +150,43 @@ Draw.loadPlugin(
       const graph = ui.editor.getGraphXml();
       const root = graph.firstChild;
 
-      /** Computes the request to call the API according to the given uri */
-      function computeRequest(uri) {
-        const liveApi = root.firstChild.getAttribute(live.api);
-
-        return uri.startsWith("http") ? uri     // absolute path
-        : uri.startsWith("/") ? liveApi + uri   // relative path
-        : null;                                 // error
-      }
-
-      /** Checks recursively in xml tree if nodes are live ones & stores live nodes ids */
-      function findLiveElementsIds(graphElement, idsList = []) {
-        // node with id === 0 is not checked
-        if(graphElement.getAttribute("id") !== "0") {
-          const elementId = graphElement.getAttribute("id");
-
-          // checks if current node is live
-          let isLiveElement = false;
-          for (const attribute of graphElement.attributes) {
-            if(attribute.name.startsWith("live.")) {
-              isLiveElement = true;
-              break;
-            }
-          }
-    
-          // stores element id if element is live
-          if(isLiveElement) {
-            idsList.push(elementId);
-          }
-        }
-
-        // if current element has children, finds live children
-        if(graphElement.children.length > 0) {
-          findLiveElementsIds(graphElement.firstChild, idsList);
-        }
-    
-        // performs check for sibling
-        const sibling = graphElement.nextElementSibling
-        if(sibling !== null) {
-          findLiveElementsIds(sibling, idsList);
-        }
-        return idsList;
-      }
-  
-      /** stores xml nodes getted with their ids */
-      function storeLiveElements(graph, ids) {
-        const output = [];
-        for(const elementId of ids) {
-          const liveElement = graph.querySelector(`[id="${elementId}"]`);
-          if(liveElement) {
-            output.push({
-              id: elementId,
-              node: liveElement
-            });
-          }
-        }
-        return output;
-      }
-
       // when inits or restarts
       if(!live.isInit) {
-        live.ids = findLiveElementsIds(graph);
-        live.nodes = storeLiveElements(graph, live.ids);
-        live.isInit = true;
         live.timeout = (+(root.firstChild.getAttribute(live.refresh) + "000")) || 10000;
-        live.graphId = ui.currentPage.node.id;
+        live.graphPageId = ui.currentPage.node.id;
+        live.nodes = findLiveNodes(graph);
+        live.isInit = true;
       }
 
       // initiates the xml doc to perform the updates
       const xmlUpdatesDoc = mxUtils.createXmlDocument();
-      const status = xmlUpdatesDoc.createElement("updates");
+      const updatesList = xmlUpdatesDoc.createElement("updates");
   
       for(const {node, id} of live.nodes) {
-        let inputStyle = node.childNodes[0].getAttribute("style");
-
-        const updateNode = xmlUpdatesDoc.createElement("update");
+        let updateNode = xmlUpdatesDoc.createElement("update");
         updateNode.setAttribute("id", id);
 
         for(const attribute of node.attributes) {
-          const {name, value: apiEndpoint} = attribute;
-          const requestUrl = computeRequest(apiEndpoint);
-
+          const {name: attrName, value: attrValue} = attribute;
+          
           // targets all live properties
-          if(name.startsWith("live.")) {
-            try {
-              const apiResponse = mxUtils.load(requestUrl);
-              
-              if(apiResponse) {
-                let parsedResponse = apiResponse
-                .getText()
-                .replace(/"/g, "")
-                .trim();
-
-                if(name === live.text) {
-                  updateNode.setAttribute(
-                    "value", 
-                    `<object label="${parsedResponse}"/>`
-                  );
-                } else if (name === live.style) {
-                  updateNode.setAttribute(
-                    "style", 
-                    parsedResponse
-                  );
-                } else {
-                  inputStyle = mxUtils.setStyle(
-                    inputStyle, 
-                    live.property.getName(name), 
-                    parsedResponse
-                  );
-                  updateNode.setAttribute("style", inputStyle);
-                }
-              }
-            }
-            catch(e) {
-              log(`Error while fetching data from ${requestUrl}: ${e}`);
-            }
+          if(attrName.startsWith("live.")) {
+            // case: live value
+            const updateOptions = {
+              liveAttrName: attrName,
+              url: computeRequest(attrValue, root.firstChild.getAttribute(live.api)),
+              style: node.childNodes[0].getAttribute("style")
+            };
+            updateNode = fetchLiveValue(updateNode, updateOptions);
           }
         }
-        status.appendChild(updateNode);
+        updatesList.appendChild(updateNode);
       }
 
       // appends "updates" node to the new doc & updates diagram with it
-      if(ui.currentPage.node.id === live.graphId) {
+      if(ui.currentPage.node.id === live.graphPageId) {
 
-        xmlUpdatesDoc.appendChild(status);
+        xmlUpdatesDoc.appendChild(updatesList);
         ui.updateDiagram(
           mxUtils.getXml(xmlUpdatesDoc)
         );
@@ -288,6 +200,92 @@ Draw.loadPlugin(
         log("Page changed, plugin stopped");
         resetScheduleUpdate();
       }
+    }
+
+    /** Fecthes value from distant api for current attribute */
+    function fetchLiveValue(currentLiveNode, options) {
+      let {liveAttrName, url, style} = options;
+
+      try {
+        const apiResponse = mxUtils.load(url);
+        
+        if(apiResponse) {
+          let parsedResponse = parseApiResponse(apiResponse);
+
+          if(liveAttrName === live.text) {
+            currentLiveNode.setAttribute(
+              "value", 
+              `<object label="${parsedResponse}"/>`
+            );
+          } else if (liveAttrName === live.style) {
+            currentLiveNode.setAttribute(
+              "style", 
+              parsedResponse
+            );
+          } else {
+            style = mxUtils.setStyle(
+              style, 
+              live.property.getName(liveAttrName), 
+              parsedResponse
+            );
+            currentLiveNode.setAttribute("style", style);
+          }
+          return currentLiveNode;
+        }
+      }
+      catch(e) {
+        log(`Error while fetching data from ${requestUrl}: ${e}`);
+      }
+    }
+
+    /** Parses received response from distant API */
+    function parseApiResponse(response) {
+      return response.getText().replace(/"/g, "").trim();
+    } 
+
+    /** Computes the request to call the API according to the given uri */
+    function computeRequest(url, liveApi) {
+      return url.startsWith("http") ? url     // absolute path
+      : url.startsWith("/") ? liveApi + url   // relative path
+      : null;                                 // error
+    }
+
+    /** Checks recursively in xml tree & stores nodes if they are live ones */
+    function findLiveNodes(graphElement, liveNodes = []) {
+      // node with id === 0 is not checked
+      if(graphElement.getAttribute("id") !== "0") {
+        const elementId = graphElement.getAttribute("id");
+
+        // checks if current node is live
+        let isLiveElement = false;
+        for (const attribute of graphElement.attributes) {
+          if(attribute.name.startsWith("live.")) {
+            isLiveElement = true;
+            break;
+          }
+        }
+
+        // stores element id if element is live
+        if(isLiveElement) {
+          liveNodes.push({
+            id: elementId,
+            node: graphElement
+          })
+        }
+      }
+
+      // if current element has children, finds live children
+      if(graphElement.children.length > 0) {
+        liveNodes = findLiveNodes(graphElement.firstChild, liveNodes);
+      }
+
+      // performs check for sibling
+      const sibling = graphElement.nextElementSibling
+      if(sibling !== null) {
+        liveNodes = findLiveNodes(sibling, liveNodes);
+      }
+
+      return liveNodes;
     }
 
     function log(text) {
