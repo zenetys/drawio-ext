@@ -111,10 +111,18 @@ Draw.loadPlugin(
                 apiPrefix: root.firstChild.getAttribute(live.api)
               };
   
-              if(attrValue.startsWith("=")) { // case: live object
-                storeLiveObjectsData(liveObjects, updateOptions);
-              } else { // case: live value
-                fetchLiveValue(updateNode, updateOptions);
+              try {
+                if(attrValue.startsWith("=")) { // case: live object
+                  storeLiveObjectsData(liveObjects, updateOptions);
+                } else { // case: live value
+                  fetchLiveValue(updateNode, updateOptions);
+                }
+              } catch(e) {
+                log(
+                  "Graph object id:", id,
+                  "| Attribute:", attrName,
+                  "\n", e.message
+                );
               }
             }
           }
@@ -124,11 +132,15 @@ Draw.loadPlugin(
 
       // performs updates for each live object previously stored
       for(const liveObjectData of liveObjects) {
-        computeLiveObject(
-        liveObjectData, 
-        updatesList, 
-        xmlUpdatesDoc.createElement
-        );
+        try {
+          computeLiveObject(
+          liveObjectData, 
+          updatesList, 
+          xmlUpdatesDoc.createElement
+          );
+        } catch(e) {
+          log("Request url: ", liveObjectData.url, "\n", e.message);
+        }
       }
 
       // appends "updates" node to the new doc & updates diagram with it
@@ -244,6 +256,7 @@ Draw.loadPlugin(
       const request = url.startsWith("http") ? url  // absolute path
       : url.startsWith("/") ? rootApi + url         // relative path
       : null;                                       // error
+      if(request === null) throw Error("url pattern is wrong");
       return request;
     }
 
@@ -347,6 +360,13 @@ Draw.loadPlugin(
         "responseRoot", 
         "return responseRoot." + source
       )(liveRawObject);
+      if(!dataSource) {
+        throw Error(
+          "Error attempting to get data: 'apiResponse." + 
+          source + 
+          "' does not exist"
+        );
+      } 
 
       for(const listener of listeners) {
         const existingNode = mxUtils.findNode(
@@ -363,6 +383,15 @@ Draw.loadPlugin(
             "data",
             attrValue
           )(dataSource);
+          if(!attrUpdatedValue) {
+            throw Error(
+              "Error attempting to update graph object with id " +
+              listener.id +
+              " for attribute " +
+              attrName +
+              ": value must return something"
+            );
+          }
 
           fillUpdateNode(
             update.node, 
@@ -400,13 +429,21 @@ Draw.loadPlugin(
     /** Sends request to distant api & parses response in the corproper form */
     function computeApiResponse(url, isString) {
       function loadDataFromApi(url) {
-        return mxUtils.load(url);
+        try {
+          const res = mxUtils.load(url);
+          return res;
+        } catch(e) {
+          const msgSuffix = isString ? " from " + url : "";
+          throw Error("Cannot load data" + msgSuffix);
+        }
       }
 
       /** Parses received response from distant API */
       function parseApiResponse(rawResponse, isString = true) {
         const parsedResponse = rawResponse.getText();
-
+        if(parsedResponse.trim() === live.mxUtilsRequestErrorMsg) {
+          throw Error("No response received from request");
+        }
         if(isString) {
           return parsedResponse.replace(/"/g, "").trim();
         } else {
@@ -414,9 +451,14 @@ Draw.loadPlugin(
         }
       } 
 
-      const rawResponse = loadDataFromApi(url);
-      const parsedResponse = parseApiResponse(rawResponse, isString);
-      return parsedResponse;
+      try {
+        const rawResponse = loadDataFromApi(url);
+        const parsedResponse = parseApiResponse(rawResponse, isString);
+        return parsedResponse;
+      } catch(e) {
+        throw Error("Error attempting to fetch data: " + e.message);
+      }
+
     }
 
     function log(...text) {
