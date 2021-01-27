@@ -64,17 +64,96 @@ Draw.loadPlugin(
       sourceDefaultValue: "hits.hits[0]._source",
       property: {
         prefix: "live.property.",
-        getName: (fullPropName) => fullPropName.slice("live.property.".length)
+        getName: (fullPropName) => fullPropName.slice(live.property.prefix.length)
       },
       nodes: [],
       timeout: 0,
       isInit: false,
       graphPageId: "",
-      mxUtilsRequestErrorMsg: "{\"status\": \"error\"}"
+      mxUtilsRequestErrorMsg: "{\"status\": \"error\"}",
+      formatPanel: {
+        currentSelectedId: 0,
+        isDisplayed: false,
+        sections: [],
+      }
     };
 
-    addLiveUpdatePalette();
+    /** Stores data to build Live Format Panel data */
+    function storeFormatPanelData(objectId = undefined) {
+      const graph = ui.editor.getGraphXml();
+      const root = graph.firstChild.firstChild;
 
+      //inits Live Format panel with diagram data
+      const livePanelData = [{
+        header: "Diagram Data",
+        entries: [
+          {
+            label: "API URL",
+            raw: live.api,
+            value: root.getAttribute(live.api)
+          },
+          {
+            label: "API Refresh",
+            raw: live.refresh,
+            value: root.getAttribute(live.refresh)
+          }
+        ]
+      }];
+
+      // gets selected node with its id if a node is selected
+      const target = mxUtils.findNode(
+        graph,
+        "id",
+        objectId
+      );
+
+      if(target) {
+        const objectData = {
+          header: "Object Data",
+          entries: [{
+            label: "Object ID",
+            value: objectId
+          }]
+        };
+        const properties = {
+          header: "Properties",
+          entries: []
+        };
+  
+        for(const attr of target.attributes) {
+          if(attr.name.startsWith("live.")) {
+            // stores attribute in object data or properties
+            const attrName = attr.name === live.data ? [1, "Dynamic Object", live.data]
+            : attr.name === live.source ? [2, "Dynamic Source", live.source]
+            : attr.name === live.text ? [3, "Dynamic Text", live.text]
+            : attr.name === live.style ? [4, "Dynamic Style", live.style]
+            : attr.name;
+  
+            if(Array.isArray(attrName)) {
+              objectData.entries[attrName[0]] = {
+                label: attrName[1],
+                raw: attrName[2],
+                value: attr.value
+              };
+            } else {
+              properties.entries.push({
+                label: live.property.getName(attrName),
+                raw: attrName,
+                value: attr.value
+              });
+            }
+          }
+        }
+        livePanelData.push(objectData);
+        livePanelData.push(properties);
+      }
+      live.formatPanel.sections = livePanelData;
+    }
+
+    ui.editor.addListener("fileLoaded", function() {
+      addLiveUpdatePalette();
+      overrideFormatPanelAction();
+    });
 
     /** Performs an update process */
     function doUpdate() {
@@ -145,7 +224,6 @@ Draw.loadPlugin(
 
       // appends "updates" node to the new doc & updates diagram with it
       if(ui.currentPage.node.id === live.graphPageId) {
-
         xmlUpdatesDoc.appendChild(updatesList);
         ui.updateDiagram(
           mxUtils.getXml(xmlUpdatesDoc)
@@ -195,7 +273,72 @@ Draw.loadPlugin(
           funct: restartScheduleUpdate
         });
         ui.toolbar.addSeparator();
+        addLiveButton({
+          label: "🔽",
+          tooltip: "Show/Hide Live Format Panel",
+          funct: toggleLiveFormatPanel
+        })
       }
+    }
+
+    /** Overrides "formatPanel" action to allows to handle panel behaviour */
+    function overrideFormatPanelAction() {
+      const initialAction = ui.actions.get('formatPanel').funct;
+      ui.actions.addAction(
+        'formatPanel', 
+        function(calledByLivePanelBtn = false) {
+          const panelWasEnabled = ui.formatWidth !== 0;
+          initialAction();
+
+          if(panelWasEnabled) {
+            if(live.formatPanel.isDisplayed && !calledByLivePanelBtn) {
+              live.formatPanel.isDisplayed = false;
+              initialAction();
+            }
+            else if(!live.formatPanel.isDisplayed && calledByLivePanelBtn) {
+              live.formatPanel.isDisplayed = true;
+              initialAction();
+            }
+            else {
+              live.formatPanel.isDisplayed = false;
+            }
+          }
+          else {
+            live.formatPanel.isDisplayed = calledByLivePanelBtn;
+          }
+        }
+      );
+
+      /** Listener called when graph selection changes */
+      function selectionChangeListener(sender, evt) {
+        const currentNodeId = evt.properties.removed 
+        ? evt.properties.removed[0].id
+        : null;
+        live.formatPanel.currentSelectedId = currentNodeId ? currentNodeId : "0";
+        storeFormatPanelData(currentNodeId);
+        
+        if(live.formatPanel.isDisplayed === true) {
+          // bypasses another listener to display live format panel
+          toggleLiveFormatPanel();
+          toggleLiveFormatPanel();
+        }
+      }
+      ui.editor.graph.getSelectionModel().addListener(
+        mxEvent.CHANGE, 
+        selectionChangeListener
+      );
+      storeFormatPanelData();
+    }
+
+    /** Displays or hides live custom format panel in format panel container */
+    function toggleLiveFormatPanel() {
+      const container = document.querySelector(".geFormatContainer");
+      ui.actions.get('formatPanel').funct(true);
+
+      while(container.children.length > 0) {
+        container.removeChild(container.children[0]);
+      }
+      displayLiveFormatPanel(container);
     }
 
     /** Stops refresh process & prevents multiple threads */
@@ -226,7 +369,6 @@ Draw.loadPlugin(
       live.timeout = 0;
       live.graphPageId = "";
       clearThread(live.thread);
-
     }
 
     /** "live-restart" action handler */
@@ -239,10 +381,9 @@ Draw.loadPlugin(
     function fetchLiveValue(currentLiveNode, options) {
       const {node, attrName, attrValue, apiPrefix} = options;
       const style = node.childNodes[0].getAttribute("style");
-      
       const url = computeRequest(attrValue, apiPrefix);
       const liveValue = computeApiResponse(url, true);
-
+      
       fillUpdateNode(
         currentLiveNode, 
         attrName, 
@@ -277,10 +418,7 @@ Draw.loadPlugin(
 
         // stores element id if element is live
         if(isLiveElement) {
-          liveNodes.push({
-            id: elementId,
-            node: graphElement
-          })
+          liveNodes.push({id: elementId,node: graphElement});
         }
       }
 
@@ -294,11 +432,10 @@ Draw.loadPlugin(
       if(sibling !== null) {
         liveNodes = findLiveNodes(sibling, liveNodes);
       }
-
       return liveNodes;
     }
 
-    /** Stores data to update nodes attributes from distant js object */
+    /** Stores data to update a node attribute from distant js object */
     function storeLiveObjectsData(currentList, options) {
       const {node, attrName, attrValue, apiPrefix} = options;
       const url = node.hasAttribute(live.data) 
@@ -307,14 +444,15 @@ Draw.loadPlugin(
         apiPrefix
       ) : apiPrefix;
 
+      // stores path from received response to fetch data
       const source = node.hasAttribute(live.source) 
       ? node.getAttribute(live.source)
       : live.sourceDefaultValue; 
       const nodeId = node.getAttribute("id");
-
       const newListenerAttr = {
         attrName,
         attrValue: attrValue.slice(1)
+        // slice => retrieves the first "="
       };
 
       const newListener = {
@@ -324,9 +462,8 @@ Draw.loadPlugin(
           newListenerAttr
         ]
       };
-
       const idInList = currentList.findIndex(
-        objectData => objectData.url === url
+        objectData => (objectData.url === url)
       );
 
       if(idInList === -1) {
@@ -340,13 +477,15 @@ Draw.loadPlugin(
         currentList.push(newObjectData);
       } else {
         const listenerId = currentList[idInList].listeners.findIndex(
-          listener => listener.id === nodeId
+          listener => (listener.id === nodeId)
         );
 
         if(listenerId === -1) {
           currentList[idInList].listeners.push(newListener);
         } else {
-          currentList[idInList].listeners[listenerId].attrs.push(newListenerAttr);
+          currentList[idInList].listeners[listenerId].attrs.push(
+            newListenerAttr
+          );
         }
       }
     }
@@ -458,11 +597,207 @@ Draw.loadPlugin(
       } catch(e) {
         throw Error("Error attempting to fetch data: " + e.message);
       }
-
     }
 
     function log(...text) {
       console.log("liveUpdate plugin:", ...text);
+    }
+
+    /** Displays cutom Live panel in cleaned format panel */
+    function displayLiveFormatPanel(panelContainer) {
+      panelContainer.appendChild(
+        addSectionToLivePanel({header: "Live"}, true)
+      );
+      for(const fpSection of live.formatPanel.sections) {
+        panelContainer.appendChild(
+          addSectionToLivePanel(fpSection)
+        );
+      }
+      if(live.formatPanel.sections.length > 1) {
+        panelContainer.appendChild(
+          addNewLivePropertyFormSection()
+        );
+      }
+    }
+
+    /** Adds a section to the custom created format live panel */
+    function addSectionToLivePanel(data, isTitle = false) {
+      if(!data) return;
+      const fpSectionContainer = document.createElement('section');
+      fpSectionContainer.className = 'geFormatSection';
+      fpSectionContainer.style.textAlign = "center";
+      fpSectionContainer.style.whiteSpace = 'nowrap';
+      fpSectionContainer.style.color = 'rgb(112, 112, 112)';
+      fpSectionContainer.style.cursor = 'default';      
+      fpSectionContainer.style.textAlign = 'center';
+      fpSectionContainer.style.fontWeight = 'bold';
+      fpSectionContainer.style.fontSize = '13px';
+      fpSectionContainer.style.borderWidth = '0px 0px 1px 1px';
+      fpSectionContainer.style.borderStyle = 'solid';
+      fpSectionContainer.style.overflow = 'auto';      
+      mxUtils.write(fpSectionContainer, data.header);
+
+      if(isTitle) {
+        fpSectionContainer.style.height = "38px";
+        fpSectionContainer.style.lineHeight = "38px";
+      } else {
+        fpSectionContainer.style.paddingTop = "5px";
+        fpSectionContainer.style.paddingBottom = "15px";
+        if(data.entries) {
+          for(const child of data.entries) {
+            addLiveInput(child);
+          }
+        }
+      }
+      return (fpSectionContainer);
+
+      /** Adds an input in the custom format panel current section */
+      function addLiveInput(data) {
+        if(!data) return;
+        const objectIdLabel = "Object ID";
+
+        const {
+          label: attrName, 
+          value: attrValue, 
+          raw: attrRawName
+        } = data;
+        const inputContainer = document.createElement("section");
+
+        const inputLabel = document.createElement("p");
+        inputLabel.style.color = 'rgb(112, 112, 112)';
+        inputLabel.style.fontWeight = 'bold';
+        inputLabel.style.fontSize = '13px';
+        inputLabel.style.padding = '10px 0px 1px 10px';
+        inputLabel.style.margin = '0px';
+        inputLabel.style.textAlign = 'left';
+        
+        const editBtn = document.createElement("button");
+        editBtn.title = "Edit property";
+        editBtn.style.borderColor = "transparent";
+
+        if(attrName !== objectIdLabel) {
+          mxUtils.write(editBtn, " ✎ ");
+          inputLabel.appendChild(editBtn);
+        }
+        mxUtils.write(inputLabel, attrName);
+        inputContainer.appendChild(inputLabel);
+        
+        const inputContent = document.createElement("input");
+        inputContent.type = "text";
+        inputContent.value = attrValue;
+        inputContent.disabled = attrName === objectIdLabel;
+        inputContent.style.border = "1px solid rgb(112, 112, 112)";
+        inputContent.style.borderRadius = "3px";
+        inputContent.style.padding = '0px';
+        inputContent.style.margin = '0px';
+        inputContainer.appendChild(inputContent);
+
+        editBtn.onclick = function() {
+          const graph = ui.editor.getGraphXml()
+          const {currentSelectedId} = live.formatPanel;
+          const isRootValue = (
+            (attrRawName === live.refresh) || (attrRawName === live.api)
+          );
+          
+          const targettedNode = mxUtils.findNode(
+            graph,
+            "id",
+            isRootValue ? "0" : currentSelectedId
+          );
+          targettedNode.setAttribute(
+            attrRawName,
+            inputContent.value
+          );
+          
+          ui.editor.setGraphXml(graph);
+          toggleLiveFormatPanel();
+          toggleLiveFormatPanel();
+        }
+        fpSectionContainer.appendChild(inputContainer);
+      }
+    }
+
+    /** Adds a section  */
+    function addNewLivePropertyFormSection() {
+      const propContainer = document.createElement('section');
+      propContainer.className = 'geFormatSection';
+      propContainer.style.textAlign = "center";
+      propContainer.style.whiteSpace = 'nowrap';
+      propContainer.style.color = 'rgb(112, 112, 112)';
+      propContainer.style.cursor = 'default';      
+      propContainer.style.textAlign = 'center';
+      propContainer.style.paddingTop = "5px";
+      propContainer.style.paddingBottom = "15px";
+      propContainer.style.fontWeight = 'bold';
+      propContainer.style.fontSize = '13px';
+      propContainer.style.borderWidth = '0px 0px 1px 1px';
+      propContainer.style.borderStyle = 'solid';
+      propContainer.style.overflow = 'auto';      
+      mxUtils.write(propContainer, "Add Property");
+
+      const nameLabel = document.createElement("p");
+      nameLabel.style.color = 'rgb(112, 112, 112)';
+      nameLabel.style.fontWeight = 'bold';
+      nameLabel.style.fontSize = '13px';
+      nameLabel.style.padding = '10px 0px 1px 10px';
+      nameLabel.style.margin = '0px';
+      nameLabel.style.textAlign = 'left';
+      mxUtils.write(nameLabel, "Live property name");
+      propContainer.appendChild(nameLabel);
+      
+      const nameContent = document.createElement("input");
+      nameContent.type = "text";
+      nameContent.style.border = "1px solid rgb(112, 112, 112)";
+      nameContent.style.borderRadius = "3px";
+      nameContent.style.padding = '0px';
+      nameContent.style.margin = '0px';
+      propContainer.appendChild(nameContent);
+
+      const valueLabel = document.createElement("p");
+      valueLabel.style.color = 'rgb(112, 112, 112)';
+      valueLabel.style.fontWeight = 'bold';
+      valueLabel.style.fontSize = '13px';
+      valueLabel.style.padding = '10px 0px 1px 10px';
+      valueLabel.style.margin = '0px';
+      valueLabel.style.textAlign = 'left';
+      mxUtils.write(valueLabel, "Live property value");
+      propContainer.appendChild(valueLabel);
+      
+      const valueContent = document.createElement("input");
+      valueContent.type = "text";
+      valueContent.style.border = "1px solid rgb(112, 112, 112)";
+      valueContent.style.borderRadius = "3px";
+      valueContent.style.padding = '0px';
+      valueContent.style.margin = '0px';
+      propContainer.appendChild(valueContent);
+      
+      const validationBtn = document.createElement("button");
+      validationBtn.style.display = "block";
+      validationBtn.style.textAlign = "center";
+
+      validationBtn.style.margin = "auto";
+      validationBtn.style.marginTop = "10px";
+
+      mxUtils.write(validationBtn, "ADD LIVE PROPERTY");
+      propContainer.appendChild(validationBtn);
+
+      validationBtn.onclick = function() {
+        const {currentSelectedId} = live.formatPanel;
+        const graph = ui.editor.getGraphXml()
+        const targettedNode = mxUtils.findNode(
+          graph,
+          "id",
+          currentSelectedId
+        );
+        targettedNode.setAttribute(
+          live.property.prefix + nameContent.value,
+          valueContent.value
+        );
+        ui.editor.setGraphXml(graph);
+        toggleLiveFormatPanel();
+        toggleLiveFormatPanel();
+      }
+      return propContainer;
     }
   }
 );
