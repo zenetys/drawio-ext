@@ -78,17 +78,21 @@ Draw.loadPlugin(
       }
     };
 
-    ui.format.showCloseButton = false;
-    ui.editor.addListener("fileLoaded", function() {
-      addLiveUpdatePalette();
-      overrideFormatPanelAction();
-      addLiveTabToFormatPanel();
+    initPlugin();
 
-      ui.editor.graph.getSelectionModel().addListener(
-        mxEvent.CHANGE, 
-        addLiveTabToFormatPanel
-      );
-    });
+    function initPlugin() {
+      ui.format.showCloseButton = false;
+      ui.editor.addListener("fileLoaded", function() {
+        addLiveUpdatePalette();
+        overrideFormatPanelAction();
+        addLiveTabToFormatPanel();
+  
+        ui.editor.graph.getSelectionModel().addListener(
+          mxEvent.CHANGE, 
+          addLiveTabToFormatPanel
+        );
+      });
+    }
 
     /** Adds "Live" custom format tab in Format Panel */
     function addLiveTabToFormatPanel() {
@@ -142,7 +146,6 @@ Draw.loadPlugin(
             const childrenList = Array.from(formatContainer.firstChild.childNodes);
             if(childrenList) {
               const id = childrenList.findIndex(elt => elt === target)
-              console.log(id, ui.format.panels[id])
               if(ui.format.panels[id]) {
                 ui.format.panels[id].container.style.display = "block";
                 setTabStyle(target, true);
@@ -198,6 +201,9 @@ Draw.loadPlugin(
         );
         liveFormatPanelContainer.appendChild(
           buildProperties(targetId)
+        );
+        liveFormatPanelContainer.appendChild(
+          buildNewPropertyForm(targetId)
         );
       }
       return liveFormatPanelContainer;
@@ -365,7 +371,8 @@ Draw.loadPlugin(
               targetId
             );
 
-            attributeValue.style.width = "125px";
+            attributeValue.style.width = "115px";
+            attributeValue.style.paddingBottom = "5px";
             const cells = [
               cb, 
               displayedName, 
@@ -395,6 +402,54 @@ Draw.loadPlugin(
           return "/images/" + img + ".gif";
         }
       }
+
+      function buildNewPropertyForm(targetId) {
+        const formContainer = new BaseFormatPanel().createPanel();
+        const title = new BaseFormatPanel().createTitle("Add Property");
+        formContainer.appendChild(title);
+        const inputs = {};
+
+        for(const key of ["name", "value"]) {
+          const input = document.createElement("input");
+          input.type = "text";
+          input.style.display = "block";
+          input.style.width = "200px";
+          input.style.borderRadius = "5px";
+          input.style.borderRadius = "1px solid rgb(112,112,112)";
+          input.style.marginBottom = "10px";
+          input.placeholder = "Property " + key;
+
+          formContainer.appendChild(input);
+          inputs[key] = input;
+        }
+        const validateBtn = document.createElement("button");
+        mxUtils.write(validateBtn, "Add Live Property");
+        validateBtn.style.width = "205px";
+
+        mxEvent.addListener(validateBtn, mxEvent.CLICK, function() {
+          if ((inputs.name.value !== "") && (inputs.value.value !== "")) {
+            updateLiveAttribute(
+              targetId, 
+              live.property.prefix + inputs.name.value,
+              inputs.value.value
+            );
+            inputs.name.value = "";
+            inputs.value.value = "";
+          }
+          else {
+            if(inputs.name.value === "") {
+              log("New property must have a name !");
+            }
+            if(inputs.value.value === "") {
+              log("New property must have a value !");
+            }
+          }
+        })
+        formContainer.appendChild(validateBtn);
+
+
+        return formContainer;
+      }
     }
 
     /** Updates live attribute using "Live" custom format panel */
@@ -412,7 +467,15 @@ Draw.loadPlugin(
 
       ui.editor.setGraphXml(graphXml);
       refreshLiveFormatPanel();
-      ui.editor.graph.selectionModel.changeSelection(selectedCells)
+      ui.editor.graph.selectionModel.changeSelection(selectedCells);
+
+      const msg = {
+        prop: "Property " + attributeName + " ",
+        action: attributeValue ? "added on " : "removed from ",
+        obj: objectId === "0" ? "graph root" : "object with id " + objectId        
+      }
+      log(msg.prop + msg.action + msg.obj);
+
     }
 
     /** Refreshes Format Panel with "Live" custom tab */
