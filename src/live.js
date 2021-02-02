@@ -73,9 +73,8 @@ Draw.loadPlugin(
       graphPageId: "",
       mxUtilsRequestErrorMsg: "{\"status\": \"error\"}",
       formatPanel: {
-        currentSelectedId: 0,
+        arePropertiesShown: false,
         isDisplayed: false,
-        sections: [],
       }
     };
 
@@ -189,25 +188,47 @@ Draw.loadPlugin(
         buildPanel("Diagram", rootAttributes, "0")
       );
       if(!graph.isSelectionEmpty()) {
+        const targetId = graph.selectionModel.cells[0].getId();
         liveFormatPanelContainer.appendChild(
           buildPanel(
             "Object", 
             objectAttributes, 
-            graph.selectionModel.cells[0].getId()
+            targetId
           )
+        );
+        liveFormatPanelContainer.appendChild(
+          buildProperties(targetId)
         );
       }
       return liveFormatPanelContainer;
 
       function buildPanel(title, content, targetId) {
         const panelContainer = new BaseFormatPanel().createPanel();
-        const titleContainer = new BaseFormatPanel().createTitle(title);
-        panelContainer.appendChild(titleContainer);
+
+        if(title) {
+          const titleContainer = new BaseFormatPanel().createTitle(title);
+          panelContainer.appendChild(titleContainer);
+        }
         for(const input of content) {
           const [displayedText, attributeName] = input;
-          panelContainer.appendChild(
-            buildInput(displayedText,attributeName,targetId)
+
+          const inputSection = document.createElement('section');
+          inputSection.style.padding = '6px 0px 1px 1px';
+          inputSection.style.whiteSpace = 'nowrap';
+          inputSection.style.overflow = 'hidden';
+          inputSection.style.fontWeight = "normal";
+  
+          const {cb, attributeValue, displayedName} = buildInput(
+            displayedText,
+            attributeName,
+            targetId
           );
+          attributeValue.style.width = "200px";
+
+          inputSection.appendChild(cb);
+          inputSection.appendChild(displayedName);
+          inputSection.appendChild(attributeValue);
+          panelContainer.appendChild(inputSection);
         }
         return panelContainer;
       }
@@ -217,38 +238,32 @@ Draw.loadPlugin(
         const target = mxUtils.findNode(graphXml, "id", targetId);
         const value = target.getAttribute(attrName) || emptyValue;
 
-        const inputSection = document.createElement('section');
-        inputSection.style.padding = '6px 0px 1px 1px';
-        inputSection.style.whiteSpace = 'nowrap';
-        inputSection.style.overflow = 'hidden';
-        inputSection.style.fontWeight = "normal";
-
         const cb = document.createElement('input');
         cb.setAttribute('type', 'checkbox');
         cb.style.margin = '0px 6px 0px 0px';
         cb.checked = value !== emptyValue;
         cb.title = (cb.checked ? "Remove":"Add") + " attribute";
-        mxEvent.addListener(cb, 'click', handleClickOnCheckbox)
-        inputSection.appendChild(cb);
 
         const displayedName = document.createElement("label");
         mxUtils.write(displayedName, displayedText);
-        inputSection.appendChild(displayedName);
   
         const attributeValue = document.createElement('input');
         attributeValue.style.backgroundColor = "transparent";
         attributeValue.style.display = "block";
-        attributeValue.style.width = "200px";
         attributeValue.type = "text";
         attributeValue.value = value;
         attributeValue.style.border = "none";
 
+        mxEvent.addListener(cb, "click", handleClickOnCheckbox);
         mxEvent.addListener(attributeValue, "keydown", handleKeyDownOnTextInput);
         mxEvent.addListener(attributeValue, "focus", handleFocusOnTextInput);
         mxEvent.addListener(attributeValue, "focusout", handleFocusoutOfTextInput);
 
-        inputSection.appendChild(attributeValue);
-        return inputSection;
+        return {
+          cb,
+          displayedName,
+          attributeValue
+        };
 
         function handleFocusOnTextInput(e) {
           e.preventDefault();
@@ -284,6 +299,102 @@ Draw.loadPlugin(
           }
         }
       }
+
+      function buildProperties(targetId) {
+        const target = mxUtils.findNode(graphXml, "id", targetId);
+
+        const panelContainer = document.createElement("section");
+        panelContainer.classList.add("geFormatSection");
+        panelContainer.style.padding = "0px";
+        panelContainer.style.position = "relative";
+        
+        const propertiesTable = document.createElement("table");
+        propertiesTable.classList.add("geProperties");
+        propertiesTable.style.whiteSpace = "nowrap";
+        propertiesTable.style.width = "240px";
+        propertiesTable.style.maxWidth = "240px";
+        propertiesTable.style.tableLayout = "fixed";
+        panelContainer.appendChild(propertiesTable);
+        
+        const propertiesArrow = document.createElement("img");
+        propertiesArrow.src = getArrowImg();
+        mxEvent.addListener(propertiesArrow, mxEvent.CLICK, function(e) {
+          live.formatPanel.arePropertiesShown = !live.formatPanel.arePropertiesShown;
+          propertiesArrow.src = getArrowImg();
+          for(const row of propertiesTable.children) {
+            if(row !== propertiesTable.firstChild) {
+              row.style.display = live.formatPanel.arePropertiesShown 
+              ? "table-row"
+              :"none";
+            }
+          }
+
+        })
+
+        const tr = document.createElement("tr");
+        tr.classList.add("gePropHeader");
+        propertiesTable.appendChild(tr);
+        
+        const headerCells = [
+          [propertiesArrow, "20px"],
+          ["Property", "75px"],
+          ["Value", "145px"],
+        ];
+        for(const headerCell of headerCells) {
+          const th = document.createElement("th");
+          th.classList.add("gePropHeaderCell");
+          const [content, width] = headerCell;
+          th.style.width = width;
+
+          typeof content === "string" ? mxUtils.write(th, content)
+          : th.appendChild(content);
+          tr.appendChild(th);
+        }
+
+        for(const attribute of target.attributes) {
+          if(attribute.name.startsWith(live.property.prefix)) {
+            const newLine = document.createElement("tr");
+            newLine.classList.add("gePropNonHeaderRow");
+            newLine.style.display = live.formatPanel.arePropertiesShown 
+            ? "table-row"
+            :"none";
+
+            const {cb, displayedName, attributeValue} = buildInput(
+              live.property.getName(attribute.name), 
+              attribute.name, 
+              targetId
+            );
+
+            attributeValue.style.width = "125px";
+            const cells = [
+              cb, 
+              displayedName, 
+              attributeValue
+            ];
+
+            for(const cellContent of cells) {
+              const td = document.createElement("td");
+              td.classList.add("gePropRowCell");
+              if(typeof cellContent === "string") {
+                mxUtils.write(td, cellContent);
+              } else {
+                td.appendChild(cellContent);
+              }
+              newLine.appendChild(td);
+            }
+            propertiesTable.appendChild(newLine);
+          }
+        }
+
+        return panelContainer;
+
+        function getArrowImg() {
+          const img = live.formatPanel.arePropertiesShown 
+          ? "expanded"
+          : "collapsed";
+          return "/images/" + img + ".gif";
+        }
+      }
     }
 
     /** Updates live attribute using "Live" custom format panel */
@@ -296,10 +407,8 @@ Draw.loadPlugin(
         objectId
       );
 
-      target.setAttribute(
-        attributeName,
-        attributeValue ? attributeValue : ""
-      );
+      attributeValue ? target.setAttribute(attributeName,attributeValue)
+      : target.removeAttribute(attributeName);
 
       ui.editor.setGraphXml(graphXml);
       refreshLiveFormatPanel();
