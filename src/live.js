@@ -62,7 +62,12 @@ Draw.loadPlugin(
       text: "live.text",
       data: "live.data",
       source: "live.source",
-      sourceDefaultValue: "hits.hits[0]._source",
+      apitypes: [
+        {
+          id: "es+",
+          source: "hits.hits[0]._source"
+        }
+      ],
       property: {
         prefix: "live.property.",
         getName: (fullPropName) => fullPropName.slice(live.property.prefix.length)
@@ -475,7 +480,7 @@ Draw.loadPlugin(
         obj: objectId === "0" ? "graph root" : "object with id " + objectId        
       }
       log(msg.prop + msg.action + msg.obj);
-
+      resetScheduleUpdate();
     }
 
     /** Refreshes Format Panel with "Live" custom tab */
@@ -720,9 +725,11 @@ Draw.loadPlugin(
       ) : apiPrefix;
 
       // stores path from received response to fetch data
-      const source = node.hasAttribute(live.source) 
+      const source = node.hasAttribute(live.apitype)
+      ? getSourceFromSpecificApi(node.getAttribute(live.apitype))
+      : node.hasAttribute(live.source) 
       ? node.getAttribute(live.source)
-      : live.sourceDefaultValue; 
+      : null; 
       const nodeId = node.getAttribute("id");
       const newListenerAttr = {
         attrName,
@@ -765,6 +772,14 @@ Draw.loadPlugin(
       }
     }
 
+    /** Computes source from api targetted with its id in stored apitypes */
+    function getSourceFromSpecificApi(apitype) {
+      const targetApi = live.apitypes.find(
+        api => (api.id === apitype)
+      );
+      return targetApi ? targetApi.source : null;
+    }
+
     /** Computes values for each object attributes of a live node */
     function computeLiveObject(object, updates, createNode) {
       const {url, source, listeners} = object;
@@ -772,8 +787,12 @@ Draw.loadPlugin(
 
       const dataSource = new Function(
         "responseRoot", 
-        "return responseRoot." + source
+        source ? "return responseRoot." + source : "return responseRoot"
       )(liveRawObject);
+
+      console.log(dataSource);
+
+
       if(!dataSource) {
         throw Error(
           "Error attempting to get data: 'apiResponse." + 
