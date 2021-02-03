@@ -181,47 +181,53 @@ Draw.loadPlugin(
       liveFormatPanelContainer.style.cursor = 'default';
 
       const rootAttributes = [
-        ["API URL", live.api],
-        ["API Refresh", live.refresh],
+        ["API", live.api],
+        ["API Type", live.apitype],
+        ["Source", live.source],
+        ["Refresh", live.refresh],
       ];
       const objectAttributes = [
-        ["Dynamic Object", live.data],
-        ["API Type", live.apitype],
-        ["Dynamic Source", live.source],
-        ["Dynamic Text", live.text],
-        ["Dynamic Style", live.style],
+        ["Object", live.data],
+        ["Text", live.text],
+        ["Style", live.style],
       ];
 
+      const targetId = graph.isSelectionEmpty() ? "0"
+      : graph.selectionModel.cells[0].getId();
+
       liveFormatPanelContainer.appendChild(
-        buildPanel("Diagram", rootAttributes, "0")
+        buildPanel(
+          targetId === "0" ? "Diagram" : "Object " + targetId,
+          targetId,
+          rootAttributes,
+          objectAttributes
+        )
       );
+
       if(!graph.isSelectionEmpty()) {
-        const targetId = graph.selectionModel.cells[0].getId();
-        liveFormatPanelContainer.appendChild(
-          buildPanel(
-            "Object", 
-            objectAttributes, 
-            targetId
-          )
-        );
-        liveFormatPanelContainer.appendChild(
-          buildProperties(targetId)
-        );
-        liveFormatPanelContainer.appendChild(
+        liveFormatPanelContainer.append(
+          buildProperties(targetId),
           buildNewPropertyForm(targetId)
         );
       }
       return liveFormatPanelContainer;
 
-      function buildPanel(title, content, targetId) {
+      function buildPanel(title, targetId, rootInputs, objectInputs) {
+        const isObjectSelected = targetId !== "0";
         const panelContainer = new BaseFormatPanel().createPanel();
+        const titleContainer = new BaseFormatPanel().createTitle(title);
+        panelContainer.appendChild(titleContainer);
 
-        if(title) {
-          const titleContainer = new BaseFormatPanel().createTitle(title);
-          panelContainer.appendChild(titleContainer);
+        handlePanelInputs(rootInputs, panelContainer, targetId);
+        if(isObjectSelected) {
+          handlePanelInputs(objectInputs, panelContainer, targetId);
         }
-        for(const input of content) {
-          const [displayedText, attributeName] = input;
+        return panelContainer;
+      }
+
+      function handlePanelInputs(inputsList, container, targetId) {
+        for(const input of inputsList) {
+          const [text, attributeName] = input;
 
           const inputSection = document.createElement('section');
           inputSection.style.padding = '6px 0px 1px 1px';
@@ -229,57 +235,78 @@ Draw.loadPlugin(
           inputSection.style.overflow = 'hidden';
           inputSection.style.fontWeight = "normal";
   
-          const {cb, attributeValue, displayedName} = buildInput(
-            displayedText,
+          const {cb, shortField, label} = buildInput(
+            text,
             attributeName,
             targetId
           );
-          attributeValue.style.width = "200px";
+          shortField.style.width = "200px";
 
           inputSection.appendChild(cb);
-          inputSection.appendChild(displayedName);
-          inputSection.appendChild(attributeValue);
-          panelContainer.appendChild(inputSection);
+          inputSection.appendChild(label);
+          inputSection.appendChild(shortField);
+          container.appendChild(inputSection);
         }
-        return panelContainer;
       }
 
-      function buildInput(displayedText, attrName, targetId) {
-        const emptyValue = "-";
+      function buildInput(text, attrName, targetId) {
+        const emptyValue = "unset";
         const target = mxUtils.findNode(graphXml, "id", targetId);
-        const value = target.getAttribute(attrName) || emptyValue;
+        const root = mxUtils.findNode(graphXml, "id", "0");
+        const targetIsRoot = targetId === "0";
+        const value = target.getAttribute(attrName) || null;
 
         const cb = document.createElement('input');
         cb.setAttribute('type', 'checkbox');
-        cb.style.margin = '0px 6px 0px 0px';
-        cb.checked = value !== emptyValue;
+        cb.style.margin = '3px 3px 0px 0px';
+        cb.checked = value;
         cb.title = (cb.checked ? "Remove":"Add") + " attribute";
 
-        const displayedName = document.createElement("label");
-        mxUtils.write(displayedName, displayedText);
+        const label = document.createElement("label");
+        mxUtils.write(label, text);
   
-        const attributeValue = document.createElement('input');
-        attributeValue.style.backgroundColor = "transparent";
-        attributeValue.style.display = "block";
-        attributeValue.type = "text";
-        attributeValue.value = value;
-        attributeValue.style.border = "none";
+        const shortField = document.createElement('input');
+        shortField.style.backgroundColor = "transparent";
+        shortField.style.display = "block";
+        shortField.type = "text";
+        shortField.style.border = "none";
+        shortField.value = value; 
+
+        shortField.placeholder = (attrName === live.source) ? getSourceValue(
+          target, 
+          root
+        ): (root.hasAttribute(attrName)) ? "[root] " + root.getAttribute(attrName)
+        : emptyValue;
 
         mxEvent.addListener(cb, "click", handleClickOnCheckbox);
-        mxEvent.addListener(attributeValue, "keydown", handleKeyDownOnTextInput);
-        mxEvent.addListener(attributeValue, "focus", handleFocusOnTextInput);
-        mxEvent.addListener(attributeValue, "focusout", handleFocusoutOfTextInput);
+        mxEvent.addListener(shortField, "keydown", handleKeyDownOnTextInput);
+        mxEvent.addListener(shortField, "focus", handleFocusOnShortField);
+        mxEvent.addListener(shortField, "focusout", handleFocusoutOfTextInput);
 
         return {
           cb,
-          displayedName,
-          attributeValue
+          label,
+          shortField
         };
 
-        function handleFocusOnTextInput(e) {
+        function getSourceValue(target, root) {
+          return computeSource(target) ? computeSource(target)
+          : computeSource(root) ? computeSource(root) : emptyValue;
+
+          function computeSource(elt) {
+            if(elt.hasAttribute(live.apitype)) {
+              const apiType = live.apitypes.find(
+                (api) => (api.id === elt.getAttribute(live.apitype))
+              );
+              return apiType ? `api ${apiType.id} => ${apiType.source}`:false;
+            }
+          }
+        }
+
+        function handleFocusOnShortField(e) {
           e.preventDefault();
-          if(attributeValue.value === emptyValue) {
-            attributeValue.value = "";
+          if(!shortField.value) {
+            shortField.value = "";
           }
         }
         function handleKeyDownOnTextInput(e) {
@@ -292,11 +319,11 @@ Draw.loadPlugin(
           }
         }
         function handleFocusoutOfTextInput() {
-          attributeValue.value = mxUtils.findNode(
+          shortField.value = mxUtils.findNode(
             graphXml, 
             "id", 
             targetId
-          ).getAttribute(attrName) || emptyValue;
+          ).getAttribute(attrName) || "";
         }
         function handleClickOnCheckbox(e) {
           e.preventDefault();
@@ -306,7 +333,7 @@ Draw.loadPlugin(
               updateLiveAttribute(targetId, attrName);
             }
           } else {
-            attributeValue.focus();
+            shortField.focus();
           }
         }
       }
@@ -350,18 +377,18 @@ Draw.loadPlugin(
             const newLine = document.createElement("tr");
             newLine.classList.add("gePropNonHeaderRow");
 
-            const {cb, displayedName, attributeValue} = buildInput(
+            const {cb, label, shortField} = buildInput(
               live.property.getName(attribute.name), 
               attribute.name, 
               targetId
             );
 
-            attributeValue.style.width = "115px";
-            attributeValue.style.paddingBottom = "5px";
+            shortField.style.width = "115px";
+            shortField.style.paddingBottom = "5px";
             const cells = [
               cb, 
-              displayedName, 
-              attributeValue
+              label, 
+              shortField
             ];
 
             for(const cellContent of cells) {
@@ -464,14 +491,14 @@ Draw.loadPlugin(
     /** Performs an update process */
     function doUpdate() {
       clearThread(live.thread);
-      const graph = ui.editor.getGraphXml();
-      const root = graph.firstChild;
-      
+      const graphXml = ui.editor.getGraphXml();
+      const root = mxUtils.findNode(graphXml, 'id', "0");
+
       // when inits or restarts
       if(!live.isInit) {
-        live.timeout = (+(root.firstChild.getAttribute(live.refresh) + "000")) || 10000;
+        live.timeout = (+(root.getAttribute(live.refresh) + "000")) || 60000;
         live.graphPageId = ui.currentPage.node.id;
-        live.nodes = findLiveNodes(graph);
+        live.nodes = findLiveNodes(graphXml);
         live.isInit = true;
       }
 
@@ -485,32 +512,52 @@ Draw.loadPlugin(
         const updateNode = xmlUpdatesDoc.createElement("update");
         updateNode.setAttribute("id", id);
 
-        for(const {name: attrName, value: attrValue} of node.attributes) {          
-          // targets all live properties
-          if(attrName.startsWith("live.")) {
-            if(attrName !== live.data && attrName !== live.source) {
-              const updateOptions = {
-                node,
-                attrName,
-                attrValue,
-                apiPrefix: root.firstChild.getAttribute(live.api)
-              };
-  
-              try {
-                if(attrValue.startsWith("=")) { // case: live object
-                  storeLiveObjectsData(liveObjects, updateOptions);
-                } else { // case: live value
-                  fetchLiveValue(updateNode, updateOptions);
-                }
-              } catch(e) {
-                log(
-                  "Graph object id:", id,
-                  "| Attribute:", attrName,
-                  "\n", e.message
-                );
+        for(const {name: attrName, value: attrValue} of node.attributes) {
+          function currentAttributeIsLive() {
+            if(!attrName.startsWith("live.")) {
+              return false;
+            } else {
+              for(const unavailableLiveAttribute of [
+                live.api,
+                live.refresh,
+                live.data,
+                live.source,
+                live.apiType
+              ]) {
+                if(attrName === unavailableLiveAttribute) return false;
               }
+              return true;
             }
           }
+
+          // if(attrName.startsWith("live.")) {
+          // targets all live attributes
+          if(currentAttributeIsLive()) {
+            const updateOptions = {
+              node,
+              attrName,
+              attrValue,
+              rootApi: root.getAttribute(live.api),
+              rootType: root.getAttribute(live.apitype),
+              rootSource: root.getAttribute(live.source),
+              nodeStyle: node.firstChild.getAttribute("style")
+            };
+
+            try {
+              if(attrValue.startsWith("=")) {
+                storeLiveObjectsData(liveObjects, updateOptions);
+              } else {
+                fetchLiveValue(updateNode, updateOptions);
+              }
+            } catch(e) {
+              log(
+                "Graph object id:", id,
+                "| Attribute:", attrName,
+                "\n", e.message
+              );
+            }
+          }
+          // }
         }
         updatesList.appendChild(updateNode);
       }
@@ -519,9 +566,9 @@ Draw.loadPlugin(
       for(const liveObjectData of liveObjects) {
         try {
           computeLiveObject(
-          liveObjectData, 
-          updatesList, 
-          xmlUpdatesDoc.createElement
+            liveObjectData, 
+            updatesList, 
+            xmlUpdatesDoc.createElement
           );
         } catch(e) {
           log("Request url: ", liveObjectData.url, "\n", e.message);
@@ -529,6 +576,7 @@ Draw.loadPlugin(
       }
 
       // appends "updates" node to the new doc & updates diagram with it
+      // or stops update pipeline if graph page changed
       if(ui.currentPage.node.id === live.graphPageId) {
         xmlUpdatesDoc.appendChild(updatesList);
         ui.updateDiagram(
@@ -630,25 +678,30 @@ Draw.loadPlugin(
     }
 
     /** Fecthes value from distant api for current attribute */
-    function fetchLiveValue(currentLiveNode, options) {
-      const {node, attrName, attrValue, apiPrefix} = options;
-      const style = node.firstChild.getAttribute("style");
-      const url = computeRequest(attrValue, apiPrefix);
+    function fetchLiveValue(updateNode, options) {
+      const {node, attrName, attrValue, rootApi,nodeStyle} = options;
+      const url = computeRequest(attrValue, rootApi, node.getAttribute(live.api));
       const liveValue = computeApiResponse(url, true);
-
       fillUpdateNode(
-        currentLiveNode, 
+        updateNode, 
         attrName, 
         liveValue, 
-        style
+        nodeStyle
       );
     }
 
     /** Computes the request to call the API according to the given uri */
-    function computeRequest(url, rootApi) {
-      const request = url.startsWith("http") ? url  // absolute path
-      : url.startsWith("/") ? rootApi + url         // relative path
-      : null;                                       // error
+    function computeRequest(url, rootApi, nodeApi) {
+      let request = "";
+      if(url) {
+        request = url.startsWith("http") ? url        // absolute path
+        : url.startsWith("/") ?                       // relative path using
+        (nodeApi) ? (nodeApi + url) : (rootApi + url)     // object api or root api 
+        : null;                                       // error
+      } else {
+        request = (nodeApi) ? nodeApi
+        : (rootApi) ? rootApi : null;
+      }
       if(request === null) throw Error("url pattern is wrong");
       return request;
     }
@@ -689,18 +742,28 @@ Draw.loadPlugin(
 
     /** Stores data to update a node attribute from distant js object */
     function storeLiveObjectsData(currentList, options) {
-      const {node, attrName, attrValue, apiPrefix} = options;
-      const url = node.hasAttribute(live.data) 
-      ? computeRequest(
+      const {node, attrName, attrValue, rootApi, rootType, rootSource, nodeStyle} = options;
+
+      // computes request url depending on given attributes in object & graph root
+      const url = computeRequest(
         node.getAttribute(live.data),
-        apiPrefix
-      ) : apiPrefix;
+        rootApi,
+        node.getAttribute(live.api)
+      );
 
       // stores path from received response to fetch data
-      const source = node.hasAttribute(live.apitype) ? getSourceFromSpecificApi(
-        node.getAttribute(live.apitype)
-      ): node.hasAttribute(live.source) ? node.getAttribute(live.source)
-      : null; 
+      const source = getSourceFromSpecificApi(
+        node.getAttribute(live.apitype),
+        node.getAttribute(live.source),
+        rootType,
+        rootSource
+      );
+
+      // const source = node.hasAttribute(live.apitype) ? getSourceFromSpecificApi(
+      //   node.getAttribute(live.apitype)
+      // ): node.hasAttribute(live.source) ? node.getAttribute(live.source)
+      // : null; 
+
       const nodeId = node.getAttribute("id");
       const newListenerAttr = {
         attrName,
@@ -709,7 +772,7 @@ Draw.loadPlugin(
 
       const newListener = {
         id: nodeId,
-        style: node.firstChild.getAttribute("style"),
+        style: nodeStyle,//: node.firstChild.getAttribute("style"),
         attrs: [
           newListenerAttr
         ]
@@ -743,11 +806,22 @@ Draw.loadPlugin(
     }
 
     /** Computes source from api targetted with its id in stored apitypes */
-    function getSourceFromSpecificApi(apitype) {
-      const targetApi = live.apitypes.find(
-        api => (api.id === apitype)
-      );
-      return targetApi ? targetApi.source : null;
+    function getSourceFromSpecificApi(nodeType, nodeSource, rootType, rootSource) {
+
+      function getSourceFromApitype(apitype) {
+        if(apitype) {
+          const targettedApi = live.apitypes.find(
+            api => (api.id === apitype)
+          );
+          if(targettedApi) return targettedApi.source;
+        }
+        return false;
+      }
+      return getSourceFromApitype(nodeType) ? getSourceFromApitype(nodeType)
+      : (nodeSource) ? nodeSource
+      : getSourceFromApitype(rootType) ? getSourceFromApitype(rootType)
+      : (rootSource) ? rootSource
+      : null;
     }
 
     /** Computes values for each object attributes of a live node */
