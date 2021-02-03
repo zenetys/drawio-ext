@@ -89,14 +89,17 @@ Draw.loadPlugin(
       ui.format.showCloseButton = false;
       ui.editor.addListener("fileLoaded", function() {
         addLiveUpdatePalette();
-        overrideFormatPanelAction();
         addLiveTabToFormatPanel();
-  
-        ui.editor.graph.getSelectionModel().addListener(
-          mxEvent.CHANGE, 
-          addLiveTabToFormatPanel
-        );
+        overrideFormatPanelRefresh();
       });
+    }
+
+    function overrideFormatPanelRefresh() {
+      const formatRefreshBasicFunc = ui.format.refresh;
+      ui.format.refresh = function() {
+        mxUtils.bind(ui.format,formatRefreshBasicFunc)();
+        addLiveTabToFormatPanel();
+      }
     }
 
     /** Adds "Live" custom format tab in Format Panel */
@@ -470,7 +473,7 @@ Draw.loadPlugin(
       : target.removeAttribute(attributeName);
 
       ui.editor.setGraphXml(graphXml);
-      refreshLiveFormatPanel();
+      // refreshLiveFormatPanel();
       ui.editor.graph.selectionModel.changeSelection(selectedCells);
 
       const msg = {
@@ -586,7 +589,7 @@ Draw.loadPlugin(
           doUpdate,
           live.timeout
         );
-        refreshLiveFormatPanel();
+        // refreshLiveFormatPanel();
       }
       else {
         log("Page changed, plugin stopped");
@@ -636,7 +639,8 @@ Draw.loadPlugin(
         'formatPanel', 
         function() {
           initialAction();
-          addLiveTabToFormatPanel();
+          console.log("action 'formatPanel")
+          // addLiveTabToFormatPanel();
         }
       );
     }
