@@ -64,7 +64,7 @@ Draw.loadPlugin(
       source: "live.source",
       apitypes: [
         {
-          id: "es+",
+          id: "elastic",
           source: "hits.hits[0]._source"
         }
       ],
@@ -697,10 +697,9 @@ Draw.loadPlugin(
       ) : apiPrefix;
 
       // stores path from received response to fetch data
-      const source = node.hasAttribute(live.apitype)
-      ? getSourceFromSpecificApi(node.getAttribute(live.apitype))
-      : node.hasAttribute(live.source) 
-      ? node.getAttribute(live.source)
+      const source = node.hasAttribute(live.apitype) ? getSourceFromSpecificApi(
+        node.getAttribute(live.apitype)
+      ): node.hasAttribute(live.source) ? node.getAttribute(live.source)
       : null; 
       const nodeId = node.getAttribute("id");
       const newListenerAttr = {
