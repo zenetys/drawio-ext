@@ -219,6 +219,9 @@ Draw.loadPlugin(
         const isObjectSelected = targetId !== "0";
         const panelContainer = new BaseFormatPanel().createPanel();
         const titleContainer = new BaseFormatPanel().createTitle(title);
+        panelContainer.style.padding = "12px";
+
+        titleContainer.style.width = "100%";
         panelContainer.appendChild(titleContainer);
 
         handlePanelInputs(rootInputs, panelContainer, targetId);
@@ -238,25 +241,25 @@ Draw.loadPlugin(
           inputSection.style.overflow = 'hidden';
           inputSection.style.fontWeight = "normal";
   
-          const {cb, shortField, label} = buildInput(
+          const {cb, shortField, longField, label} = buildInput(
             text,
             attributeName,
             targetId
           );
-          shortField.style.width = "200px";
 
           inputSection.appendChild(cb);
           inputSection.appendChild(label);
           inputSection.appendChild(shortField);
+          inputSection.appendChild(longField);
           container.appendChild(inputSection);
         }
       }
 
       function buildInput(text, attrName, targetId) {
-        const emptyValue = "unset";
+        const emptyValue = "";
         const target = mxUtils.findNode(graphXml, "id", targetId);
         const root = mxUtils.findNode(graphXml, "id", "0");
-        const targetIsRoot = targetId === "0";
+        // const targetIsRoot = targetId === "0";
         const value = target.getAttribute(attrName) || null;
 
         const cb = document.createElement('input');
@@ -270,32 +273,47 @@ Draw.loadPlugin(
   
         const shortField = document.createElement('input');
         shortField.style.backgroundColor = "transparent";
-        shortField.style.display = "block";
+        shortField.style.width = "60%";
+        shortField.style.height = "20px";
+        shortField.style.float = "right";
         shortField.type = "text";
-        shortField.style.border = "none";
-        shortField.value = value; 
-
-        shortField.placeholder = (attrName === live.source) ? getSourceValue(
-          target, 
-          root
-        ): (root.hasAttribute(attrName)) ? "[root] " + root.getAttribute(attrName)
+        shortField.style.border = "1px solid " + ui.format.inactiveTabBackgroundColor;
+        shortField.value = value;
+        shortField.style.borderRadius = "0px";
+        shortField.style.fontStyle = (value) ? "normal": "italic";
+        
+        shortField.placeholder = (attrName === live.apitype) ? "raw"
+        : (attrName === live.source) ? getSourceValue(target, root)
+        : root.hasAttribute(attrName) ? root.getAttribute(attrName)
         : emptyValue;
 
+        const longField = document.createElement("textarea");
+        longField.style.display = "block";
+        longField.style.boxSizing = "border-box";
+        longField.style.width = "100%";
+        longField.style.height = "40px";
+        longField.style.padding = "0px";
+        longField.style.resize = "none";
+        longField.style.border = "1px solid " + ui.format.inactiveTabBackgroundColor;
+        longField.style.display = "none";
+        longField.style.borderRadius = "0px";
+        longField.value = value;
+        longField.placeholder = shortField.placeholder;
+        longField.style.fontStyle = (value) ? "normal" : "italic";
+
         mxEvent.addListener(cb, "click", handleClickOnCheckbox);
-        mxEvent.addListener(shortField, "keydown", handleKeyDownOnTextInput);
         mxEvent.addListener(shortField, "focus", handleFocusOnShortField);
-        mxEvent.addListener(shortField, "focusout", handleFocusoutOfTextInput);
+        mxEvent.addListener(longField, "keydown", handleKeyDownOnTextInput);
+        mxEvent.addListener(longField, "focusout", handleFocusoutOfTextInput);
 
         return {
           cb,
           label,
-          shortField
+          longField,
+          shortField,
         };
 
         function getSourceValue(target, root) {
-          return computeSource(target) ? computeSource(target)
-          : computeSource(root) ? computeSource(root) : emptyValue;
-
           function computeSource(elt) {
             if(elt.hasAttribute(live.apitype)) {
               const apiType = live.apitypes.find(
@@ -304,13 +322,17 @@ Draw.loadPlugin(
               return apiType ? `api ${apiType.id} => ${apiType.source}`:false;
             }
           }
+          return computeSource(target) ? computeSource(target)
+          : computeSource(root) ? computeSource(root) 
+          : root.hasAttribute(live.source) ? root.getAttribute(live.source)
+          : emptyValue;
         }
 
         function handleFocusOnShortField(e) {
           e.preventDefault();
-          if(!shortField.value) {
-            shortField.value = "";
-          }
+          shortField.style.display = "none";
+          longField.style.display = "block";
+          longField.focus();
         }
         function handleKeyDownOnTextInput(e) {
           if(e.key === "Enter") {
@@ -327,6 +349,8 @@ Draw.loadPlugin(
             "id", 
             targetId
           ).getAttribute(attrName) || "";
+          longField.style.display = "none";
+          shortField.style.display = "inline";
         }
         function handleClickOnCheckbox(e) {
           e.preventDefault();
@@ -348,13 +372,16 @@ Draw.loadPlugin(
         panelContainer.classList.add("geFormatSection");
         panelContainer.style.padding = "0px";
         panelContainer.style.position = "relative";
+        panelContainer.style.width = "240px";
         
         const propertiesTable = document.createElement("table");
         propertiesTable.classList.add("geProperties");
         propertiesTable.style.whiteSpace = "nowrap";
         propertiesTable.style.width = "240px";
-        propertiesTable.style.maxWidth = "240px";
         propertiesTable.style.tableLayout = "fixed";
+        propertiesTable.style.borderCollapse = "collapse";
+        propertiesTable.style.padding = "0px";
+        propertiesTable.style.paddingRight = "12px";
         panelContainer.appendChild(propertiesTable);
 
         const tr = document.createElement("tr");
@@ -362,15 +389,16 @@ Draw.loadPlugin(
         propertiesTable.appendChild(tr);
         
         const headerCells = [
-          [" ", "20px"],
+          [" ", "15px"],
           ["Property", "75px"],
-          ["Value", "145px"],
+          ["Value", "138px"],
         ];
         for(const headerCell of headerCells) {
           const th = document.createElement("th");
           th.classList.add("gePropHeaderCell");
           const [content, width] = headerCell;
           mxUtils.write(th, content);
+          th.style.boxSizing = "border-box";
           th.style.width = width;
           tr.appendChild(th);
         }
@@ -380,14 +408,20 @@ Draw.loadPlugin(
             const newLine = document.createElement("tr");
             newLine.classList.add("gePropNonHeaderRow");
 
-            const {cb, label, shortField} = buildInput(
+
+            const {cb, label, shortField, longField} = buildInput(
               live.property.getName(attribute.name), 
               attribute.name, 
               targetId
             );
 
-            shortField.style.width = "115px";
-            shortField.style.paddingBottom = "5px";
+            shortField.style.width = "132px";
+            shortField.style.height = "20px";
+            shortField.style.float = "left";
+            shortField.style.padding = "0px";
+            // shortField.style.border = "1px solid red";
+            longField.style.border = "1px solid " + ui.format.inactiveTabBackgroundColor;
+            longField.style.borderRadius = "0px";
             const cells = [
               cb, 
               label, 
@@ -396,7 +430,9 @@ Draw.loadPlugin(
 
             for(const cellContent of cells) {
               const td = document.createElement("td");
-              td.classList.add("gePropRowCell");
+              // td.classList.add("gePropRowCell");
+              // td.style.padding = "0px";
+
               if(typeof cellContent === "string") {
                 mxUtils.write(td, cellContent);
               } else {
@@ -404,7 +440,15 @@ Draw.loadPlugin(
               }
               newLine.appendChild(td);
             }
+
+            const longFieldCell = document.createElement("th");
+            longFieldCell.colSpan = "3";
+            longFieldCell.style.paddingRight = "12px";
+            longFieldCell.appendChild(longField)
+
+
             propertiesTable.appendChild(newLine);
+            propertiesTable.appendChild(longFieldCell);
           }
         }
         return panelContainer;
@@ -414,15 +458,19 @@ Draw.loadPlugin(
         const formContainer = new BaseFormatPanel().createPanel();
         const title = new BaseFormatPanel().createTitle("Add Property");
         formContainer.appendChild(title);
+        formContainer.style.padding = "12px";
+        formContainer.style.textAlign = "center";
         const inputs = {};
 
         for(const key of ["name", "value"]) {
           const input = document.createElement("input");
           input.type = "text";
           input.style.display = "block";
-          input.style.width = "200px";
-          input.style.borderRadius = "5px";
-          input.style.borderRadius = "1px solid rgb(112,112,112)";
+          input.style.width = "100%";
+          input.style.height = "30px";
+          input.style.boxSizing = "border-box";
+          input.style.borderRadius = "0px";
+          input.style.border = "1px solid " + ui.format.inactiveTabBackgroundColor;
           input.style.marginBottom = "10px";
           input.placeholder = "Property " + key;
 
@@ -431,7 +479,7 @@ Draw.loadPlugin(
         }
         const validateBtn = document.createElement("button");
         mxUtils.write(validateBtn, "Add Live Property");
-        validateBtn.style.width = "205px";
+        validateBtn.style.width = "80%";
 
         mxEvent.addListener(validateBtn, mxEvent.CLICK, function() {
           if ((inputs.name.value !== "") && (inputs.value.value !== "")) {
