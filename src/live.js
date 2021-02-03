@@ -326,28 +326,13 @@ Draw.loadPlugin(
         propertiesTable.style.maxWidth = "240px";
         propertiesTable.style.tableLayout = "fixed";
         panelContainer.appendChild(propertiesTable);
-        
-        const propertiesArrow = document.createElement("img");
-        propertiesArrow.src = getArrowImg();
-        mxEvent.addListener(propertiesArrow, mxEvent.CLICK, function(e) {
-          live.formatPanel.arePropertiesShown = !live.formatPanel.arePropertiesShown;
-          propertiesArrow.src = getArrowImg();
-          for(const row of propertiesTable.children) {
-            if(row !== propertiesTable.firstChild) {
-              row.style.display = live.formatPanel.arePropertiesShown 
-              ? "table-row"
-              :"none";
-            }
-          }
-
-        })
 
         const tr = document.createElement("tr");
         tr.classList.add("gePropHeader");
         propertiesTable.appendChild(tr);
         
         const headerCells = [
-          [propertiesArrow, "20px"],
+          [" ", "20px"],
           ["Property", "75px"],
           ["Value", "145px"],
         ];
@@ -355,10 +340,8 @@ Draw.loadPlugin(
           const th = document.createElement("th");
           th.classList.add("gePropHeaderCell");
           const [content, width] = headerCell;
+          mxUtils.write(th, content);
           th.style.width = width;
-
-          typeof content === "string" ? mxUtils.write(th, content)
-          : th.appendChild(content);
           tr.appendChild(th);
         }
 
@@ -366,9 +349,6 @@ Draw.loadPlugin(
           if(attribute.name.startsWith(live.property.prefix)) {
             const newLine = document.createElement("tr");
             newLine.classList.add("gePropNonHeaderRow");
-            newLine.style.display = live.formatPanel.arePropertiesShown 
-            ? "table-row"
-            :"none";
 
             const {cb, displayedName, attributeValue} = buildInput(
               live.property.getName(attribute.name), 
@@ -397,15 +377,7 @@ Draw.loadPlugin(
             propertiesTable.appendChild(newLine);
           }
         }
-
         return panelContainer;
-
-        function getArrowImg() {
-          const img = live.formatPanel.arePropertiesShown 
-          ? "expanded"
-          : "collapsed";
-          return "/images/" + img + ".gif";
-        }
       }
 
       function buildNewPropertyForm(targetId) {
@@ -733,8 +705,7 @@ Draw.loadPlugin(
       const nodeId = node.getAttribute("id");
       const newListenerAttr = {
         attrName,
-        attrValue: attrValue.slice(1)
-        // slice => retrieves the first "="
+        attrValue: attrValue.slice(1) // slice => retrieves the first "="
       };
 
       const newListener = {
@@ -789,9 +760,6 @@ Draw.loadPlugin(
         "responseRoot", 
         source ? "return responseRoot." + source : "return responseRoot"
       )(liveRawObject);
-
-      console.log(dataSource);
-
 
       if(!dataSource) {
         throw Error(
