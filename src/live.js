@@ -272,7 +272,7 @@ Draw.loadPlugin(
         mxUtils.write(label, text);
   
         const shortField = document.createElement('input');
-        shortField.style.backgroundColor = "transparent";
+        shortField.style.backgroundColor = "white";
         shortField.style.width = "60%";
         shortField.style.height = "20px";
         shortField.style.float = "right";
