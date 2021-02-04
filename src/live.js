@@ -377,20 +377,23 @@ Draw.loadPlugin(
           longField.focus();
         }
         function handleKeyDownOnTextInput(e) {
-          if(e.key === "Enter") {
-            const attrNewValue = e.target.value;
-            updateLiveAttribute(targetId, attrName, attrNewValue);
-          }
-          if(e.key === "Escape") {
+          if(e.key === "Enter" || e.key === "Escape") {
+            if(e.key === "Escape") {
+              longField.value = value;
+            }
             document.activeElement.blur();
           }
         }
         function handleFocusoutOfTextInput() {
-          shortField.value = mxUtils.findNode(
+          const initialValue = mxUtils.findNode(
             graphXml, 
             "id", 
             targetId
           ).getAttribute(attrName) || "";
+          
+          if(initialValue !== longField.value) {
+            updateLiveAttribute(targetId, attrName, longField.value);
+          }
           longField.style.display = "none";
           shortField.style.display = "inline";
         }
