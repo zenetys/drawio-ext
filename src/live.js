@@ -573,7 +573,7 @@ Draw.loadPlugin(
                 live.refresh,
                 live.data,
                 live.source,
-                live.apiType
+                live.apitype
               ]) {
                 if(attrName === unavailableLiveAttribute) return false;
               }
@@ -591,7 +591,7 @@ Draw.loadPlugin(
               rootApi: root.getAttribute(live.api),
               rootType: root.getAttribute(live.apitype),
               rootSource: root.getAttribute(live.source),
-              nodeStyle: node.firstChild.getAttribute("style")
+              nodeStyle: node.firstChild.getAttribute("style") || node.getAttribute("style")
             };
 
             try {
