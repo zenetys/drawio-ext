@@ -55,6 +55,9 @@ Draw.loadPlugin(
     // stores live properties values
     const live = {
       thread: null,
+      username: "live.username",
+      apikey: "live.apikey",
+      password: "live.password",
       api: "live.api",
       apitype: "live.apitype",
       refresh: "live.refresh",
@@ -85,6 +88,8 @@ Draw.loadPlugin(
 
     initPlugin();
 
+
+    /** Launches "Live" feature in webapp */
     function initPlugin() {
         // Extract from original plugin animation.js
         // https://github.com/jgraph/drawio/blob/master/src/main/webapp/plugins/animation.js
@@ -136,6 +141,7 @@ Draw.loadPlugin(
         }
     }
 
+    /** Overrides format panel reshresh event to add Live tab */
     function overrideFormatPanelRefresh() {
       const formatRefreshBasicFunc = ui.format.refresh;
       ui.format.refresh = function() {
@@ -228,6 +234,9 @@ Draw.loadPlugin(
       const rootAttributes = [
         ["API", live.api],
         ["API Type", live.apitype],
+        ["Username", live.username],
+        ["Password", live.password],
+        ["API Key", live.apikey],
         ["Source", live.source],
         ["Refresh", live.refresh],
       ];
@@ -572,12 +581,6 @@ Draw.loadPlugin(
       resetScheduleUpdate();
     }
 
-    /** Refreshes Format Panel with "Live" custom tab */
-    function refreshLiveFormatPanel() {
-      ui.actions.get("formatPanel").funct();
-      ui.actions.get("formatPanel").funct();
-    }
-
     /** Performs an update process */
     function doUpdate() {
       clearThread(live.thread);
@@ -610,6 +613,9 @@ Draw.loadPlugin(
               for(const unavailableLiveAttribute of [
                 live.api,
                 live.refresh,
+                live.username,
+                live.apikey,
+                live.password,
                 live.data,
                 live.source,
                 live.apitype
@@ -719,19 +725,6 @@ Draw.loadPlugin(
       }
     }
 
-    /** Overrides "formatPanel" action to allows to handle panel behaviour */
-    function overrideFormatPanelAction() {
-      const initialAction = ui.actions.get('formatPanel').funct;
-      ui.actions.addAction(
-        'formatPanel', 
-        function() {
-          initialAction();
-          console.log("action 'formatPanel")
-          // addLiveTabToFormatPanel();
-        }
-      );
-    }
-
     /** Stops refresh process & prevents multiple threads */
     function clearThread(threadId) {
       clearTimeout(threadId);
@@ -768,11 +761,29 @@ Draw.loadPlugin(
       startScheduleUpdate();
     }
 
+    /** Gets credentials to perform request to a distant api */
+    function getCredentials(targetId, isUrlPrefixed) {
+      const graphXml = ui.editor.getGraphXml();
+      const root = mxUtils.findNode(graphXml, "id", "0");
+      const target = mxUtils.findNode(graphXml, "id", targetId);
+      const credentials = {};
+      for(const attribute of ["username", "apikey", "password"]) {
+        credentials[attribute] = (isUrlPrefixed) 
+        ? root.getAttribute(live[attribute])
+        : target.getAttribute(live[attribute]);
+      }
+      return (credentials.username) ? credentials : null;
+    }
+
     /** Fecthes value from distant api for current attribute */
     function fetchLiveValue(updateNode, options) {
       const {node, attrName, attrValue, rootApi,nodeStyle} = options;
       const url = computeRequest(attrValue, rootApi, node.getAttribute(live.api));
-      const liveValue = computeApiResponse(url, true);
+      const credentials = getCredentials(
+        node.getAttribute("id"), 
+        url.startsWith("/")
+      );
+      const liveValue = computeApiResponse(url, true, credentials);
       fillUpdateNode(
         updateNode, 
         attrName, 
@@ -850,20 +861,23 @@ Draw.loadPlugin(
         rootSource
       );
 
-      // const source = node.hasAttribute(live.apitype) ? getSourceFromSpecificApi(
-      //   node.getAttribute(live.apitype)
-      // ): node.hasAttribute(live.source) ? node.getAttribute(live.source)
-      // : null; 
-
       const nodeId = node.getAttribute("id");
       const newListenerAttr = {
         attrName,
         attrValue: attrValue.slice(1) // slice => retrieves the first "="
       };
 
+      // adds credentials if data is stored in targetted graph node
+      const credentials = getCredentials(
+        nodeId,
+        node.hasAttribute(live.data) 
+        ? node.getAttribute(live.data).startsWith("/")
+        : true
+      );
+
       const newListener = {
         id: nodeId,
-        style: nodeStyle,//: node.firstChild.getAttribute("style"),
+        style: nodeStyle,
         attrs: [
           newListenerAttr
         ]
@@ -880,8 +894,14 @@ Draw.loadPlugin(
             newListener
           ]
         };
+        if(credentials) newObjectData.credentials = credentials;
         currentList.push(newObjectData);
       } else {
+        // adds credentials to the object data if credentials exist & are not stored
+        if(!currentList[idInList].credentials && credentials) {
+          currentList[idInList].credentials = credentials;
+        }
+
         const listenerId = currentList[idInList].listeners.findIndex(
           listener => (listener.id === nodeId)
         );
@@ -917,8 +937,8 @@ Draw.loadPlugin(
 
     /** Computes values for each object attributes of a live node */
     function computeLiveObject(object, updates, createNode) {
-      const {url, source, listeners} = object;
-      const liveRawObject = computeApiResponse(url, false);
+      const {url, source, listeners, credentials} = object;
+      const liveRawObject = computeApiResponse(url, false, credentials);
 
       const dataSource = new Function(
         "responseRoot", 
@@ -992,24 +1012,38 @@ Draw.loadPlugin(
     }
 
     /** Sends request to distant api & parses response in the corproper form */
-    function computeApiResponse(url, isString) {
-      function loadDataFromApi(url) {
+    function computeApiResponse(url, isStringResponse, credentials) {
+      function loadDataFromApi(url, credentials) {
         try {
-          const res = mxUtils.load(url);
-          return res;
+          let req = undefined;
+          if(credentials) {
+            const {username, apikey, password} = credentials;
+            req = new mxXmlRequest(
+              "https://labs.zenetys.com/api/d/TEST/word",
+              null,
+              "GET",
+              false,
+              username,
+              password ? password : apikey
+            )
+            req.send(); 
+          } else {
+            req = mxUtils.load(url);
+          }
+          return req;
         } catch(e) {
-          const msgSuffix = isString ? " from " + url : "";
+          const msgSuffix = isStringResponse ? " from " + url : "";
           throw Error("Cannot load data" + msgSuffix);
         }
       }
 
       /** Parses received response from distant API */
-      function parseApiResponse(rawResponse, isString = true) {
+      function parseApiResponse(rawResponse, isStringResponse = true) {
         const parsedResponse = rawResponse.getText();
         if(parsedResponse.trim() === live.mxUtilsRequestErrorMsg) {
           throw Error("No response received from request");
         }
-        if(isString) {
+        if(isStringResponse) {
           return parsedResponse.replace(/"/g, "").trim();
         } else {
           return JSON.parse(parsedResponse);
@@ -1017,8 +1051,8 @@ Draw.loadPlugin(
       } 
 
       try {
-        const rawResponse = loadDataFromApi(url);
-        const parsedResponse = parseApiResponse(rawResponse, isString);
+        const rawResponse = loadDataFromApi(url, credentials);
+        const parsedResponse = parseApiResponse(rawResponse, isStringResponse);
         return parsedResponse;
       } catch(e) {
         throw Error("Error attempting to fetch data: " + e.message);
