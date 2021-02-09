@@ -34,12 +34,13 @@ Draw.loadPlugin(
       text: "live.text",
       data: "live.data",
       source: "live.source",
-      apitypes: [
-        {
-          id: "elastic",
-          source: "hits.hits[0]._source"
-        }
-      ],
+      apitypes: [{
+        id: "elastic",
+        source: "hits.hits[0]._source"
+      },{
+        id: "hastat",
+        post: hastatBuildObject
+      }],
       property: {
         prefix: "live.property.",
         getName: (fullPropName) => fullPropName.slice(live.property.prefix.length)
@@ -821,15 +822,20 @@ Draw.loadPlugin(
 
     /**
      * Transforms raw API response to exploitable data depending on source
-     * @param {object} raw 
-     * @param {string} source 
+     * @param {object} raw Raw received API response
+     * @param {string|function} source Path from raw or function to 
+     * handle raw to get exploitable data
      * @returns computed exploitable data
      */
     function buildExploitableData(raw, source) {
-      const exploitableData = new Function(
-        "root",
-        source ? "return root." + source : "return root"
-      )(raw);
+      const exploitableData = (typeof source === "string") ? (
+        new Function(
+          "root",
+          source ? "return root." + source : "return root"
+        )(raw)
+      ): (typeof source === "function") ? source(raw)
+      : raw;
+      
       if(exploitableData) return exploitableData;
       else {
         throw Error(
@@ -998,7 +1004,10 @@ Draw.loadPlugin(
           const targettedApi = live.apitypes.find(
             api => (api.id === apitype)
           );
-          if(targettedApi) return targettedApi.source;
+          if(targettedApi) {
+            if(targettedApi.post) return targettedApi.post;
+            else return targettedApi.source;
+          }
         }
         return false;
       }
@@ -1020,18 +1029,24 @@ Draw.loadPlugin(
       const {url, source, listeners, credentials} = dataset;
       const apiRawResponse = computeApiResponse(url, false, credentials);
 
-      const dataSource = new Function(
-        "responseRoot", 
-        source ? "return responseRoot." + source : "return responseRoot"
-      )(apiRawResponse);
-
+      let dataSource = null;
+      if(typeof source === "string") {
+        dataSource = new Function(
+          "responseRoot", 
+          source ? "return responseRoot." + source : "return responseRoot"
+        )(apiRawResponse); 
+      } else if(typeof source === "function") {
+        dataSource = source(apiRawResponse);
+      } else {
+        dataSource = apiRawResponse;
+      }
       if(!dataSource) {
         throw Error(
           "Error attempting to fetch data: 'apiResponse." + 
           source + 
           "' does not exist"
         );
-      } 
+      }
 
       // Each listener is a object containing corresponding 
       // graph node id & attributes to update it
@@ -1156,6 +1171,22 @@ Draw.loadPlugin(
       } catch(e) {
         throw Error("Error attempting to fetch data: " + e.message);
       }
+    }
+
+    /**
+     * Builds a valid object from a broken API response
+     * @param {JSON} json Invalid API received response
+     * @returns rebuilt object
+     */
+    function hastatBuildObject(json) {
+      const obj = [];
+      for (const e1 of json) {
+        const t = [];
+        for (const e2 of e1)
+          t[e2.field.name] = e2.value.value;
+        obj[t["pxname"]][t["svname"]] = t;
+      }
+      return obj;
     }
 
     function log(...text) {
