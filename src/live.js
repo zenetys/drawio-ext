@@ -1,58 +1,27 @@
 /**
  * Live Update plugin.
+ * 
  * Allows you to update separately each selected graph element.
+ * Use live attributes to configure the plugin.
  * 
- * Use "live.api" and "live.refresh" in the meta data of the diagram to configure 
- * the plugin:
- * 
+ * In the metadata of the diagram (graph element with id = 0)
  *    - live.api: url prefix to request the distant API (optional, see below).
  *    - live.refresh: interval between 2 updates, set in seconds (optional, 
  *      default is 10s).
- *    - Both are stored as attributes for the graph element with id = 0.
  * 
- * If you want a graph element becomes live updatable, you must add at least one 
- * of the following properties to the element (right click > "Edit Data" or 
+ * In the graph objects properties (right click > "Edit Data" or 
  * CTRL+M):
- * 
+ *    - live.data: calls a complex API (returning an object)
  *    - live.text: updates element text node.
  *    - live.style: updates element style.
  *    - live.property.<PROPERTY_NAME>: updates element <PROPERTY_NAME> value.
  *        Example: "live.property.fillOpacity" updates "Fill Opacity" element 
  *        property.
  * 
- * The value for each live property is the url used to get the requested resource.
- * The value can be an absolute path (ex: https://my.api/path/to/resource) or a 
- * relative path: in this case, stored value is concatenated with live.api prefix 
- * to build the request full url.
- * 
- * The APIs receiving requests MUST respond only a string corresponding to the 
- * updated value for the requested attribute:
- *    - "live.text" endpoint only returns updated displayed text.
- *    - "live.style" endpoint returns full updated element style.
- *    - "live.property.<PROPERTY_NAME>" endpoint only returns the updated value 
- *      for corresponding element property.
- * 
- * To handle live update behaviour, use the buttons stored in interface toolbar:
- * 
- *    - ⏺︎ (Play) : Starts the plugin feature.
- *    - ⏸ (Pause) : Stops the feature.
- *    - 🔄 (Restart) : Updates graph element & starts the feature.
- * 
- * If plugin is running on a page & you switch to another, plugin autostops.
- * 
- * Difference between Play & Restart: 
- * 
- * When played for first time, plugin stores the ids of all current graph live 
- * elements, to not have to fetch them each time there is an update. 
- * When Pause is clicked, live update feature is disabled but the stored ids stay, 
- * then id storage is not done when you click on Play. 
- * If the graph changes during the pause with live elements added or removed, you 
- * should click on Restart to perform the ids storage in the current graph & avoid 
- * troubles.
+ * See documentation for more details.
  */
 Draw.loadPlugin(
   function(ui) {
-    // stores live properties values
     const live = {
       thread: null,
       username: "live.username",
@@ -87,7 +56,6 @@ Draw.loadPlugin(
     };
 
     initPlugin();
-
 
     /** Launches "Live" feature in webapp */
     function initPlugin() {
@@ -158,6 +126,7 @@ Draw.loadPlugin(
       const formatWidth = parseInt(formatContainer.style.width);
       const headersNb = formatHeaders.childNodes.length;
 
+      // Adds tab only if formatWidth > 0 === format panel is displayed
       if(formatWidth > 0) {
         const headerLength = parseInt(formatWidth / (headersNb + 1));
         for(const header of formatHeaders.children) {
@@ -179,8 +148,14 @@ Draw.loadPlugin(
           handleLiveFormatPanelDisplay(e.target);
         });
 
+        /**
+         * Listener called at "click" on format panel tabs  
+         * Displays Live Format Panel if liveHeader is clicked
+         * @param {HTMLElement} target Format Panel clicked tab
+         */
         function handleLiveFormatPanelDisplay(target) {
           if(target === liveHeader) {
+            // selected tab is Live => display Live Format Panel
             live.formatPanel.isDisplayed = true;
             liveContent.style.display = "block";
             formatContainer.appendChild(liveContent);
@@ -195,6 +170,7 @@ Draw.loadPlugin(
               }
             }
           } else {
+            // Hide Live panel & display selected one
             live.formatPanel.isDisplayed = false;
             setTabStyle(liveHeader)
             liveContent.style.display = "none";
@@ -210,6 +186,12 @@ Draw.loadPlugin(
           }
         }
 
+        /**
+         * Sets Format Panel tab style, depending 
+         * on if current tab is focused one or not
+         * @param {HTMLElement} elt Format Panel tab
+         * @param {boolean} isActiveTab True if selected tab is active one
+         */
         function setTabStyle(elt, isActiveTab = false) {
           elt.style.backgroundColor = isActiveTab ? "inherit"
           : ui.format.inactiveTabBackgroundColor;
@@ -224,12 +206,7 @@ Draw.loadPlugin(
     function buildLiveFormatPanelContent() {
       const graphXml = ui.editor.getGraphXml();
       const graph = ui.editor.graph;
-      
       const liveFormatPanelContainer = document.createElement('section');
-      liveFormatPanelContainer.style.whiteSpace = 'nowrap';
-      liveFormatPanelContainer.style.color = 'rgb(112, 112, 112)';
-      liveFormatPanelContainer.style.textAlign = 'left';
-      liveFormatPanelContainer.style.cursor = 'default';
 
       const rootAttributes = [
         ["API", live.api],
@@ -240,7 +217,8 @@ Draw.loadPlugin(
         ["Source", live.source],
         ["Refresh", live.refresh],
       ];
-      const objectAttributes = [
+      const objectAttributes = [ 
+        // Displayed only if a node is selected in the graph
         ["Object", live.data],
         ["Text", live.text],
         ["Style", live.style],
@@ -250,7 +228,7 @@ Draw.loadPlugin(
       : graph.selectionModel.cells[0].getId();
 
       liveFormatPanelContainer.appendChild(
-        buildPanel(
+        buildSubpanel(
           targetId === "0" ? "Diagram" : "Object " + targetId,
           targetId,
           rootAttributes,
@@ -258,30 +236,45 @@ Draw.loadPlugin(
         )
       );
 
+      // Adds node attributes & form to add a live attribute
+      // if a graph node is selected
       if(!graph.isSelectionEmpty()) {
         liveFormatPanelContainer.append(
-          buildProperties(targetId),
+          buildPropertiesSubpanel(targetId),
           buildNewPropertyForm(targetId)
         );
       }
       return liveFormatPanelContainer;
 
-      function buildPanel(title, targetId, rootInputs, objectInputs) {
-        const isObjectSelected = targetId !== "0";
-        const panelContainer = new BaseFormatPanel().createPanel();
+      /**
+       * Builds a subpanel in the Live Format Panel
+       * @param {string} title Subpanel title
+       * @param {string} targetId Targetted graph node id
+       * @param {array<objects>} rootInputs List of root live attributes data
+       * @param {array<objects>} graphNodeInputs List of graph nodes attributes data
+       * @returns The built subpanel
+       */
+      function buildSubpanel(title, targetId, rootInputs, graphNodeInputs) {
+        const isGraphNodeSelected = targetId !== "0";
+        const subpanelContainer = new BaseFormatPanel().createPanel();
+        subpanelContainer.style.padding = "12px";
         const titleContainer = new BaseFormatPanel().createTitle(title);
-        panelContainer.style.padding = "12px";
-
         titleContainer.style.width = "100%";
-        panelContainer.appendChild(titleContainer);
+        subpanelContainer.appendChild(titleContainer);
 
-        handlePanelInputs(rootInputs, panelContainer, targetId);
-        if(isObjectSelected) {
-          handlePanelInputs(objectInputs, panelContainer, targetId);
+        handlePanelInputs(rootInputs, subpanelContainer, targetId);
+        if(isGraphNodeSelected) {
+          handlePanelInputs(graphNodeInputs, subpanelContainer, targetId);
         }
-        return panelContainer;
+        return subpanelContainer;
       }
 
+      /**
+       * Builds inputs then appends its to the Live format panel container
+       * @param {Array<object>} inputsList List of data for the input build
+       * @param {HTMLElement} container Inputs HTML container
+       * @param {string} targetId Targetted graph node id
+       */
       function handlePanelInputs(inputsList, container, targetId) {
         for(const input of inputsList) {
           const [text, attributeName] = input;
@@ -298,14 +291,18 @@ Draw.loadPlugin(
             targetId
           );
 
-          inputSection.appendChild(cb);
-          inputSection.appendChild(label);
-          inputSection.appendChild(shortField);
-          inputSection.appendChild(longField);
+          inputSection.append(cb, label, shortField, longField);
           container.appendChild(inputSection);
         }
       }
 
+      /**
+       * Builds an input in the Live format panel
+       * @param {string} text Displayed label
+       * @param {string} attrName Input's corresponding live attribute
+       * @param {string} targetId Targetted graph node id
+       * @returns {object} Set of all HTML elements for the input
+       */
       function buildInput(text, attrName, targetId) {
         const emptyValue = "";
         const target = mxUtils.findNode(graphXml, "id", targetId);
@@ -333,7 +330,7 @@ Draw.loadPlugin(
         shortField.style.fontStyle = (value) ? "normal": "italic";
         
         shortField.placeholder = (attrName === live.apitype) ? "raw"
-        : (attrName === live.source) ? getSourceValue(target, root)
+        : (attrName === live.source) ? getSourcePlaceholder(target, root)
         : root.hasAttribute(attrName) ? root.getAttribute(attrName)
         : emptyValue;
 
@@ -343,6 +340,7 @@ Draw.loadPlugin(
         longField.style.width = "100%";
         longField.style.padding = "0px";
         longField.style.margin = "0px";
+        longField.style.backgroundColor = "white";
         longField.style.resize = "none";
         longField.style.border = "1px solid " + ui.format.inactiveTabBackgroundColor;
         longField.style.display = "none";
@@ -364,17 +362,29 @@ Draw.loadPlugin(
           shortField,
         };
 
-        function getSourceValue(target, root) {
-          function computeSource(elt) {
+        /**
+         * Computes placeholder for "source" live format panel input.
+         * Checks depend on nodes **live.apitype** & **live.source** attributes
+         * @param {Node} target targetted graph node 
+         * @param {Node} root graph root node 
+         * @returns {string} Computed placeholder or default empty value
+         */
+        function getSourcePlaceholder(target, root) {
+          /**
+           * Computes source placeholder depending on 
+           * checked node **live.apitype** attribute value
+           * @param {Node} elt Current checked node
+           */
+          function checkApitype(elt) {
             if(elt.hasAttribute(live.apitype)) {
               const apiType = live.apitypes.find(
                 (api) => (api.id === elt.getAttribute(live.apitype))
               );
               return apiType ? `api ${apiType.id} => ${apiType.source}`:false;
-            }
+            } else return false;
           }
-          return computeSource(target) ? computeSource(target)
-          : computeSource(root) ? computeSource(root) 
+          return checkApitype(target) ? checkApitype(target)
+          : checkApitype(root) ? checkApitype(root) 
           : root.hasAttribute(live.source) ? root.getAttribute(live.source)
           : emptyValue;
         }
@@ -401,7 +411,7 @@ Draw.loadPlugin(
           ).getAttribute(attrName) || "";
           
           if(initialValue !== longField.value) {
-            updateLiveAttribute(targetId, attrName, longField.value);
+            updateLiveAttrInFormatPanel(targetId, attrName, longField.value);
           }
           longField.style.display = "none";
           shortField.style.display = "inline";
@@ -411,7 +421,7 @@ Draw.loadPlugin(
           const isChecked = !e.target.checked;
           if(isChecked) {
             if(mxUtils.confirm("Are you sure to remove " + attrName + " ?")) {
-              updateLiveAttribute(targetId, attrName);
+              updateLiveAttrInFormatPanel(targetId, attrName);
             }
           } else {
             shortField.focus();
@@ -419,7 +429,11 @@ Draw.loadPlugin(
         }
       }
 
-      function buildProperties(targetId) {
+      /**
+       * Builds "Properties" section of the Live format panel 
+       * @param {string} targetId Targetted graph object's id
+       */
+      function buildPropertiesSubpanel(targetId) {
         const target = mxUtils.findNode(graphXml, "id", targetId);
 
         const panelContainer = new BaseFormatPanel().createPanel();
@@ -502,6 +516,10 @@ Draw.loadPlugin(
         return panelContainer;
       }
 
+      /**
+       * Builds the "Add new property" form in the Live format panel 
+       * @param {string} targetId Targetted graph object's id
+       */
       function buildNewPropertyForm(targetId) {
         const formContainer = new BaseFormatPanel().createPanel();
         const title = new BaseFormatPanel().createTitle("Add Property");
@@ -531,7 +549,7 @@ Draw.loadPlugin(
 
         mxEvent.addListener(validateBtn, mxEvent.CLICK, function() {
           if ((inputs.name.value !== "") && (inputs.value.value !== "")) {
-            updateLiveAttribute(
+            updateLiveAttrInFormatPanel(
               targetId, 
               live.property.prefix + inputs.name.value,
               inputs.value.value
@@ -547,35 +565,37 @@ Draw.loadPlugin(
               log("New property must have a value !");
             }
           }
-        })
+        });
         formContainer.appendChild(validateBtn);
-
-
         return formContainer;
       }
     }
 
-    /** Updates live attribute using "Live" custom format panel */
-    function updateLiveAttribute(objectId, attributeName, attributeValue = null) {
+    /**
+     * Updates a live attribute using Live custom format panel
+     * @param {string} targetId Targetted graph node id
+     * @param {string} attributeName Name of the attribute to update
+     * @param {string} attributeValue Computed update value for target's selected attribute
+     */
+    function updateLiveAttrInFormatPanel(targetId, attributeName, attributeValue = null) {
       const selectedCells = [...ui.editor.graph.selectionModel.cells];
       const graphXml = ui.editor.getGraphXml();
       const target = mxUtils.findNode(
         graphXml,
         "id",
-        objectId
+        targetId
       );
 
       attributeValue ? target.setAttribute(attributeName,attributeValue)
       : target.removeAttribute(attributeName);
 
       ui.editor.setGraphXml(graphXml);
-      // refreshLiveFormatPanel();
       ui.editor.graph.selectionModel.changeSelection(selectedCells);
 
       const msg = {
         prop: "Property " + attributeName + " ",
         action: attributeValue ? "added on " : "removed from ",
-        obj: objectId === "0" ? "graph root" : "object with id " + objectId        
+        obj: targetId === "0" ? "graph root" : "object with id " + targetId        
       }
       log(msg.prop + msg.action + msg.obj);
       resetScheduleUpdate();
@@ -585,27 +605,31 @@ Draw.loadPlugin(
     function doUpdate() {
       clearThread(live.thread);
       const graphXml = ui.editor.getGraphXml();
-      const root = mxUtils.findNode(graphXml, 'id', "0");
+      const rootNode = mxUtils.findNode(graphXml, 'id', "0");
 
-      // when inits or restarts
       if(!live.isInit) {
-        live.timeout = (+(root.getAttribute(live.refresh) + "000")) || 60000;
+        live.timeout = (+(rootNode.getAttribute(live.refresh) + "000")) || 10000;
         live.graphPageId = ui.currentPage.node.id;
         live.nodes = findLiveNodes(graphXml);
         live.isInit = true;
       }
 
-      // initiates the xml doc to perform the updates & the array which stores live objects data
+      // Initiates the xml doc to perform the updates 
+      // & the array which stores data for complex APIs
       const xmlUpdatesDoc = mxUtils.createXmlDocument();
       const updatesList = xmlUpdatesDoc.createElement("updates");
-      const liveObjects = [];
-  
-      for(const {node, id} of live.nodes) {
-        // creates an update node for each targetted live node
-        const updateNode = xmlUpdatesDoc.createElement("update");
-        updateNode.setAttribute("id", id);
 
-        for(const {name: attrName, value: attrValue} of node.attributes) {
+      const complexDatasets = [];
+      const complexApiResponses = [];
+  
+      for(const {graphNode, graphNodeId} of live.nodes) {
+        if(!graphNodeId) continue;
+        // Creates an update node for each targetted live node
+        // which stores all updates for corresponding graph object
+        const updateNode = xmlUpdatesDoc.createElement("update");
+        updateNode.setAttribute("id", graphNodeId);
+
+        for(const {name: attrName, value: attrValue} of graphNode.attributes) {
           function currentAttributeIsLive() {
             if(!attrName.startsWith("live.")) {
               return false;
@@ -626,53 +650,144 @@ Draw.loadPlugin(
             }
           }
 
-          // if(attrName.startsWith("live.")) {
-          // targets all live attributes
+          // Targets attribute if attribut is valid live one
           if(currentAttributeIsLive()) {
-            const updateOptions = {
-              node,
-              attrName,
-              attrValue,
-              rootApi: root.getAttribute(live.api),
-              rootType: root.getAttribute(live.apitype),
-              rootSource: root.getAttribute(live.source),
-              nodeStyle: node.firstChild.getAttribute("style") || node.getAttribute("style")
-            };
-
             try {
-              if(attrValue.startsWith("=")) {
-                storeLiveObjectsData(liveObjects, updateOptions);
+              const isComplexAttr = attrValue.startsWith("=");
+
+              const url = buildUrl(
+                isComplexAttr ? graphNode.getAttribute(live.data) : attrValue,
+                rootNode.getAttribute(live.api),
+                graphNode.getAttribute(live.api)
+              );
+
+              const credentials = getCredentials(
+                graphNode,
+                rootNode,
+                isComplexAttr ? graphNode.getAttribute(live.data).startsWith("/")
+                : attrValue.startsWith("/")
+              );
+
+              const style = (
+                graphNode.firstChild.getAttribute("style") || 
+                graphNode.getAttribute("style")
+              );
+
+              /**/
+              const targettedApi = complexApiResponses.find(
+                (response => response.url === url)
+              );
+
+              let updatedAttrValue = null;
+              if(isComplexAttr && targettedApi) {
+                updatedAttrValue = fetchAttrValueFromExploitableData(
+                  targettedApi.response,
+                  attrValue.slice(1)
+                )
               } else {
-                fetchLiveValue(updateNode, updateOptions);
+                updatedAttrValue = computeApiResponse(
+                  url, 
+                  !isComplexAttr, 
+                  credentials
+                );
+
+                if(isComplexAttr) {
+                  const rawResponse = {...updatedAttrValue};
+                  const source = getSourceForExploitableData(
+                    graphNode.getAttribute(live.apitype),
+                    graphNode.getAttribute(live.source),
+                    rootNode.getAttribute(live.apitype),
+                    rootNode.getAttribute(live.source),
+                  );
+                  complexApiResponses.push({
+                    url,
+                    response: buildExploitableData(rawResponse, source)
+                  });
+                  updatedAttrValue = fetchAttrValueFromExploitableData(
+                    {...updatedAttrValue},
+                    attrValue.slice(1)
+                  )
+                }
               }
+
+              fillUpdateNode(
+                updateNode,
+                attrName,
+                updatedAttrValue,
+                style
+              );
+            /**/
+
+
+            /*
+              if(isComplexAttr) {
+                const attributeSet = {attrName, attrValue: attrValue.slice(1)};
+                const newListener = {
+                  id: graphNodeId,
+                  style,
+                  attrs: [ attributeSet ]
+                };
+
+                const targettedDataset = complexDatasets.find(
+                  (dataset) => (dataset.url === url)
+                );
+                if(targettedDataset) {
+                  // adds credentials to the object data if credentials exist & are not stored
+                  if(!targettedDataset.credentials && credentials) {
+                    targettedDataset.credentials = credentials;
+                  }
+
+                  const targettedListener = targettedDataset.listeners.find(
+                    listener => (listener.id === graphNodeId)
+                  );
+
+                  targettedListener ? targettedListener.attrs.push(newListenerAttr)
+                  : targettedDataset.listeners.push(newListener);
+                } else {
+                  const source = getSourceForExploitableData(
+                    graphNode.getAttribute(live.apitype),
+                    graphNode.getAttribute(live.source),
+                    rootNode.getAttribute(live.apitype),
+                    rootNode.getAttribute(live.source),
+                  );
+                  const newDataset = {url, source, listeners: [newListener]};
+                  if(credentials) newDataset.credentials = credentials;
+                  complexDatasets.push(newDataset);
+                }
+              } else {
+                const updatedValue = computeApiResponse(url, true, credentials);
+                fillUpdateNode(updateNode, attrName, updatedValue, style);
+              }
+
+              */
+
             } catch(e) {
               log(
-                "Graph object id:", id,
+                "Graph object id:", graphNodeId,
                 "| Attribute:", attrName,
                 "\n", e.message
               );
             }
           }
-          // }
         }
         updatesList.appendChild(updateNode);
       }
-
-      // performs updates for each live object previously stored
-      for(const liveObjectData of liveObjects) {
+/*
+      // Performs an update for each live object previously stored
+      for(const dataset of complexDatasets) {
         try {
-          computeLiveObject(
-            liveObjectData, 
+          handleComplexResponse(
+            dataset, 
             updatesList, 
             xmlUpdatesDoc.createElement
           );
         } catch(e) {
-          log("Request url: ", liveObjectData.url, "\n", e.message);
+          log("Request url: ", dataset.url, "\n", e.message);
         }
       }
-
-      // appends "updates" node to the new doc & updates diagram with it
-      // or stops update pipeline if graph page changed
+*/
+      // Appends "updates" filled node to the new doc & updates
+      // diagram or stops update pipeline if graph page changed
       if(ui.currentPage.node.id === live.graphPageId) {
         xmlUpdatesDoc.appendChild(updatesList);
         ui.updateDiagram(
@@ -682,7 +797,6 @@ Draw.loadPlugin(
           doUpdate,
           live.timeout
         );
-        // refreshLiveFormatPanel();
       }
       else {
         log("Page changed, plugin stopped");
@@ -690,38 +804,65 @@ Draw.loadPlugin(
       }
     }
 
-    /** Adds a new palette with buttons to handle the live state in the toolbar */
+    /**
+     * Fetches the selected attribute value from computed exploitable API response
+     * @param {object} exploitableData Parsed received response with 
+     * @param {string} instructions js instructions list to retrieve value
+     */
+    function fetchAttrValueFromExploitableData(exploitableData, instructions) {
+      const updatedValue = new Function(
+        "data",
+        instructions
+      )(exploitableData);
+      if(!updatedValue) {
+        throw Error("Instructions set does not return anything");
+      } else return updatedValue;
+    }
+
+    /**
+     * Transforms raw API response to exploitable data depending on source
+     * @param {object} raw 
+     * @param {string} source 
+     * @returns computed exploitable data
+     */
+    function buildExploitableData(raw, source) {
+      const exploitableData = new Function(
+        "root",
+        source ? "return root." + source : "return root"
+      )(raw);
+      if(exploitableData) return exploitableData;
+      else {
+        throw Error(
+          "Error attempting to fetch data: 'apiResponse." + 
+          source + 
+          "' does not return anything"
+        );
+      }
+    }
+
+    /** Adds a new palette with buttons to handle the live feature state in the toolbar */
     function addLiveUpdatePalette() {
       if(!ui.toolbar) {
         log("Toolbar doesn't exist. Plugin is inactive...")
       }
       else {
-        function addLiveButton(...buttons) {
-          for(const button of buttons) {
-            ui.toolbar.addMenuFunction(
-              button.label,
-              button.tooltip,
-              true,
-              button.funct,
-              ui.toolbar.container
-            );
-          }
-        }
-
         ui.toolbar.addSeparator();
-        addLiveButton({
-          label: "⏺︎",
-          tooltip: "Start graph live update",
-          funct: startScheduleUpdate
-        },{
-          label: "⏸",
-          tooltip: "Stop graph live update",
-          funct: pauseScheduleUpdate
-        },{
-          label: "🔄",
-          tooltip: "Reload current graph & start live update",
-          funct: restartScheduleUpdate
-        });
+        const buttons = [
+          ["⏺︎","Start graph live update",startScheduleUpdate],
+          ["⏸","Stop graph live update",pauseScheduleUpdate],
+          ["🔄","Reload current graph & start live update",restartScheduleUpdate],
+        ];
+
+        for(const button of buttons) {
+          const [label, tooltip, funct] = button;
+          ui.toolbar.addMenuFunction(
+            label,
+            tooltip,
+            true,
+            funct,
+            ui.toolbar.container
+          );
+        }
       }
     }
 
@@ -761,11 +902,16 @@ Draw.loadPlugin(
       startScheduleUpdate();
     }
 
-    /** Gets credentials to perform request to a distant api */
-    function getCredentials(targetId, isUrlPrefixed) {
-      const graphXml = ui.editor.getGraphXml();
-      const root = mxUtils.findNode(graphXml, "id", "0");
-      const target = mxUtils.findNode(graphXml, "id", targetId);
+    /**
+     * Gets credentials to perform requests to a distant api requiring authentication.  
+     * Use root crdentials data if url is prefixed by root's **live.api** attribute,
+     * otherwise use targetted graph node live attributes
+     * @param {Node} target Targetted graph node
+     * @param {Node} root Graph root node
+     * @param {boolean} isUrlPrefixed True if url extends 
+     * @returns {object|null} credentials if exist or "null"
+     */
+    function getCredentials(target, root, isUrlPrefixed) {
       const credentials = {};
       for(const attribute of ["username", "apikey", "password"]) {
         credentials[attribute] = (isUrlPrefixed) 
@@ -775,30 +921,19 @@ Draw.loadPlugin(
       return (credentials.username) ? credentials : null;
     }
 
-    /** Fecthes value from distant api for current attribute */
-    function fetchLiveValue(updateNode, options) {
-      const {node, attrName, attrValue, rootApi,nodeStyle} = options;
-      const url = computeRequest(attrValue, rootApi, node.getAttribute(live.api));
-      const credentials = getCredentials(
-        node.getAttribute("id"), 
-        url.startsWith("/")
-      );
-      const liveValue = computeApiResponse(url, true, credentials);
-      fillUpdateNode(
-        updateNode, 
-        attrName, 
-        liveValue, 
-        nodeStyle
-      );
-    }
-
-    /** Computes the request to call the API according to the given uri */
-    function computeRequest(url, rootApi, nodeApi) {
+    /**
+     * Computes the request to call the API according to the given uri
+     * @param {string} url Value stored in live attribute
+     * @param {string} rootApi "live.api" value stored in root
+     * @param {string} nodeApi "live.api" value stored in current object
+     * @returns {string} computed request url
+     */
+    function buildUrl(url, rootApi, nodeApi) {
       let request = "";
       if(url) {
         request = url.startsWith("http") ? url        // absolute path
         : url.startsWith("/") ?                       // relative path using
-        (nodeApi) ? (nodeApi + url) : (rootApi + url)     // object api or root api 
+        (nodeApi) ? (nodeApi + url) : (rootApi + url) // object api or root api 
         : null;                                       // error
       } else {
         request = (nodeApi) ? nodeApi
@@ -808,7 +943,11 @@ Draw.loadPlugin(
       return request;
     }
 
-    /** Checks recursively in xml tree & stores nodes if they are live ones */
+    /**
+     * Checks recursively in xml tree & stores nodes containing live attributes
+     * @param {Node} graphElement Current checked graph node
+     * @param {Array} liveNodes List of identified graph live nodes
+     */
     function findLiveNodes(graphElement, liveNodes = []) {
       // node with id === 0 is not checked
       if(graphElement.getAttribute("id") !== "0") {
@@ -825,7 +964,7 @@ Draw.loadPlugin(
 
         // stores element id if element is live
         if(isLiveElement) {
-          liveNodes.push({id: elementId,node: graphElement});
+          liveNodes.push({graphNodeId: elementId,graphNode: graphElement});
         }
       }
 
@@ -842,84 +981,19 @@ Draw.loadPlugin(
       return liveNodes;
     }
 
-    /** Stores data to update a node attribute from distant js object */
-    function storeLiveObjectsData(currentList, options) {
-      const {node, attrName, attrValue, rootApi, rootType, rootSource, nodeStyle} = options;
-
-      // computes request url depending on given attributes in object & graph root
-      const url = computeRequest(
-        node.getAttribute(live.data),
-        rootApi,
-        node.getAttribute(live.api)
-      );
-
-      // stores path from received response to fetch data
-      const source = getSourceFromSpecificApi(
-        node.getAttribute(live.apitype),
-        node.getAttribute(live.source),
-        rootType,
-        rootSource
-      );
-
-      const nodeId = node.getAttribute("id");
-      const newListenerAttr = {
-        attrName,
-        attrValue: attrValue.slice(1) // slice => retrieves the first "="
-      };
-
-      // adds credentials if data is stored in targetted graph node
-      const credentials = getCredentials(
-        nodeId,
-        node.hasAttribute(live.data) 
-        ? node.getAttribute(live.data).startsWith("/")
-        : true
-      );
-
-      const newListener = {
-        id: nodeId,
-        style: nodeStyle,
-        attrs: [
-          newListenerAttr
-        ]
-      };
-      const idInList = currentList.findIndex(
-        objectData => (objectData.url === url)
-      );
-
-      if(idInList === -1) {
-        const newObjectData = {
-          url,
-          source,
-          listeners: [
-            newListener
-          ]
-        };
-        if(credentials) newObjectData.credentials = credentials;
-        currentList.push(newObjectData);
-      } else {
-        // adds credentials to the object data if credentials exist & are not stored
-        if(!currentList[idInList].credentials && credentials) {
-          currentList[idInList].credentials = credentials;
-        }
-
-        const listenerId = currentList[idInList].listeners.findIndex(
-          listener => (listener.id === nodeId)
-        );
-
-        if(listenerId === -1) {
-          currentList[idInList].listeners.push(newListener);
-        } else {
-          currentList[idInList].listeners[listenerId].attrs.push(
-            newListenerAttr
-          );
-        }
-      }
-    }
-
-    /** Computes source from api targetted with its id in stored apitypes */
-    function getSourceFromSpecificApi(nodeType, nodeSource, rootType, rootSource) {
-
-      function getSourceFromApitype(apitype) {
+    /**
+     * Computes path to access data from request response depending on stored
+     * apitypes targetted with its id stored in **live.apitype** attributes,
+     * or with **live.source** attributes in object & graph root
+     * @param {string} nodeType Value for attribute live.api in selected node
+     * @param {string} nodeSource Value for attribute live.source in selected node
+     * @param {string} rootType Value for attribute live.api in graph root
+     * @param {string} rootSource Value for attribute live.source in graph root
+     * @returns {string} Path from corresponding api response
+     */
+    function getSourceForExploitableData(nodeType, nodeSource, rootType, rootSource) {
+      // Gets "source" value if apitype is set
+      function getFromApitype(apitype) {
         if(apitype) {
           const targettedApi = live.apitypes.find(
             api => (api.id === apitype)
@@ -928,32 +1002,41 @@ Draw.loadPlugin(
         }
         return false;
       }
-      return getSourceFromApitype(nodeType) ? getSourceFromApitype(nodeType)
+      return getFromApitype(nodeType) ? getFromApitype(nodeType)
       : (nodeSource) ? nodeSource
-      : getSourceFromApitype(rootType) ? getSourceFromApitype(rootType)
+      : getFromApitype(rootType) ? getFromApitype(rootType)
       : (rootSource) ? rootSource
       : null;
     }
 
-    /** Computes values for each object attributes of a live node */
-    function computeLiveObject(object, updates, createNode) {
-      const {url, source, listeners, credentials} = object;
-      const liveRawObject = computeApiResponse(url, false, credentials);
+    /**
+     * Fetches api complex response for the url in a given dataset then stores 
+     * update values for attributes of each graph nodes requesting this url
+     * @param {object} dataset Set of required data to request API
+     * @param {Node} updates XML node storing update data for each graph node
+     * @param {Function} createNode Creates a new xml node to be appended to updates
+     */
+    function handleComplexResponse(dataset, updates, createNode) {
+      const {url, source, listeners, credentials} = dataset;
+      const apiRawResponse = computeApiResponse(url, false, credentials);
 
       const dataSource = new Function(
         "responseRoot", 
         source ? "return responseRoot." + source : "return responseRoot"
-      )(liveRawObject);
+      )(apiRawResponse);
 
       if(!dataSource) {
         throw Error(
-          "Error attempting to get data: 'apiResponse." + 
+          "Error attempting to fetch data: 'apiResponse." + 
           source + 
           "' does not exist"
         );
       } 
 
+      // Each listener is a object containing corresponding 
+      // graph node id & attributes to update it
       for(const listener of listeners) {
+        if(!listener.id) continue;
         const existingNode = mxUtils.findNode(
           updates,
           "id",
@@ -989,8 +1072,15 @@ Draw.loadPlugin(
       }
     }
 
-    /** Fills an update node */
-    function fillUpdateNode(updateNode, attrName, attrValue, inputStyle) {
+    /**
+     * Adds to the graph object update node the 
+     * updated value for corresponding attribute
+     * @param {Node} updateNode XML node containing graph object update data
+     * @param {string} attrName Graph object attribute name
+     * @param {string} attrValue Graph object attribute updated value
+     * @param {string} targetStyle Targetted graph node style
+     */
+    function fillUpdateNode(updateNode, attrName, attrValue, targetStyle) {
       if(attrName === live.text) {
         updateNode.setAttribute(
           "value", 
@@ -1003,7 +1093,7 @@ Draw.loadPlugin(
         );
       } else {
         const style = mxUtils.setStyle(
-          updateNode.hasAttribute("style") ? updateNode.getAttribute("style") : inputStyle,
+          updateNode.hasAttribute("style") ? updateNode.getAttribute("style") : targetStyle,
           live.property.getName(attrName), 
           attrValue
         );
@@ -1011,8 +1101,16 @@ Draw.loadPlugin(
       }
     }
 
-    /** Sends request to distant api & parses response in the corproper form */
-    function computeApiResponse(url, isStringResponse, credentials) {
+    /**
+     * Requests an extarnal API & returns parsed received response
+     * @param {string} url Url to request API
+     * @param {boolean} isStringResponse True if API returns a simple response (string) 
+     * False if returns a complex response
+     * @param {object} credentials Object containing API authentication data
+     * @returns {string|object} Parsed API response
+     */
+    function computeApiResponse(url, isSimpleResponse, credentials) {
+      /** Fetches data from distant API */
       function loadDataFromApi(url, credentials) {
         try {
           let req = undefined;
@@ -1030,20 +1128,21 @@ Draw.loadPlugin(
           } else {
             req = mxUtils.load(url);
           }
+
           return req;
         } catch(e) {
-          const msgSuffix = isStringResponse ? " from " + url : "";
+          const msgSuffix = isSimpleResponse ? " from " + url : "";
           throw Error("Cannot load data" + msgSuffix);
         }
       }
 
       /** Parses received response from distant API */
-      function parseApiResponse(rawResponse, isStringResponse = true) {
+      function parseApiResponse(rawResponse, isSimpleResponse = true) {
         const parsedResponse = rawResponse.getText();
         if(parsedResponse.trim() === live.mxUtilsRequestErrorMsg) {
           throw Error("No response received from request");
         }
-        if(isStringResponse) {
+        if(isSimpleResponse) {
           return parsedResponse.replace(/"/g, "").trim();
         } else {
           return JSON.parse(parsedResponse);
@@ -1052,7 +1151,7 @@ Draw.loadPlugin(
 
       try {
         const rawResponse = loadDataFromApi(url, credentials);
-        const parsedResponse = parseApiResponse(rawResponse, isStringResponse);
+        const parsedResponse = parseApiResponse(rawResponse, isSimpleResponse);
         return parsedResponse;
       } catch(e) {
         throw Error("Error attempting to fetch data: " + e.message);
@@ -1060,7 +1159,7 @@ Draw.loadPlugin(
     }
 
     function log(...text) {
-      console.log("liveUpdate plugin:", ...text);
+      console.trace("liveUpdate plugin:", ...text);
     }
   }
 );
