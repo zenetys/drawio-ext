@@ -223,7 +223,7 @@ Draw.loadPlugin(
       const formatRefreshBasicFunc = ui.format.refresh;
       ui.format.refresh = function() {
         mxUtils.bind(ui.format,formatRefreshBasicFunc)();
-        addLiveTabToFormatPanel();
+        if(!ui.editor.graph.isEditing()) addLiveTabToFormatPanel();
       }
     }
 
