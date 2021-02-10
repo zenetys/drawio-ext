@@ -454,13 +454,14 @@ Draw.loadPlugin(
         const target = mxUtils.findNode(graphXml, "id", targetId);
 
         const panelContainer = new BaseFormatPanel().createPanel();
-        panelContainer.style.padding = "0";
+        panelContainer.style.padding = "0 12px 0 0";
         const propertiesTable = document.createElement("table");
         propertiesTable.classList.add("geProperties");
         propertiesTable.style.whiteSpace = "nowrap";
         propertiesTable.style.width = "100%";
         propertiesTable.style.tableLayout = "fixed";
         propertiesTable.style.borderCollapse = "collapse";
+        propertiesTable.style.backgroundClip = "padding-box";
         panelContainer.appendChild(propertiesTable);
 
         const tr = document.createElement("tr");
@@ -469,12 +470,13 @@ Draw.loadPlugin(
         
         const headerCells = [
           [" ", "15px"],
-          ["Property", "75px"],
-          ["Value", "inherit"],
+          ["Property", ""],
+          ["Value", "calc(211px * .6)"],
         ];
         for(const headerCell of headerCells) {
           const th = document.createElement("th");
           th.classList.add("gePropHeaderCell");
+          th.style.padding = "0";
           const [content, width] = headerCell;
           mxUtils.write(th, content);
           th.style.width = width;
@@ -493,9 +495,10 @@ Draw.loadPlugin(
               targetId
             );
 
-            shortField.style.width = "calc(100% - 12px)";
+            shortField.style.width = "100%";
             shortField.style.height = "20px";
             shortField.style.float = "left";
+            shortField.style.boxSizing = "border-box";
             longField.style.border = "1px solid " + ui.format.inactiveTabBackgroundColor;
             longField.style.borderRadius = "0px";
             const cells = [
@@ -503,15 +506,13 @@ Draw.loadPlugin(
               label, 
               shortField
             ];
+            cb.style.margin = "0";
 
             for(const cellContent of cells) {
               const td = document.createElement("td");
-              if(cellContent === cb) {
-                td.style.textAlign = "center";
+                td.style.textAlign = cellContent === cb ? "center" : "left";
                 td.style.verticalAlign = "center";
-                cb.style.margin = "0";
-
-              }
+                td.style.padding = "0";
 
               if(typeof cellContent === "string") {
                 mxUtils.write(td, cellContent);
@@ -523,7 +524,7 @@ Draw.loadPlugin(
 
             const longFieldCell = document.createElement("th");
             longFieldCell.colSpan = "3";
-            longFieldCell.style.padding = "0 12px";
+            longFieldCell.style.paddingLeft = "12px";
             longFieldCell.appendChild(longField)
 
             propertiesTable.appendChild(newLine);
