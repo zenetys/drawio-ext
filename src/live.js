@@ -728,18 +728,18 @@ Draw.loadPlugin(
      * Computes the url to request the corresponding API
      * @param {string} url Value stored in live attribute
      * @param {string} baseApi Value for **live.api** attribute stored in base node (with id = 0)
-     * @param {string} nodeApi Value for **live.api** attribute stored in current object
-     * @returns {string} The computed request url
+     * @param {string} targetApi Value for **live.api** attribute stored in current handled object
+     * @returns {string} The computed request url 
      */
-    function buildUrl(url, baseApi, nodeApi) {
+    function buildUrl(url, baseApi, targetApi) {
       let request = "";
       if(url) {
-        request = url.startsWith("http") ? url        // absolute path
-        : url.startsWith("/") ?                       // relative path using
-        (nodeApi) ? (nodeApi + url) : (baseApi + url) // object api or base api 
-        : null;                                       // error
+        request = url.startsWith("http") ? url              // absolute path
+        : url.startsWith("/") ?                             // relative path using
+        (targetApi) ? (targetApi + url) : (baseApi + url)   // object api or base api 
+        : null;                                             // error
       } else {
-        request = (nodeApi) ? nodeApi
+        request = (targetApi) ? targetApi
         : (baseApi) ? baseApi : null;
       }
       if(request === null) throw Error("url pattern is wrong");
@@ -788,14 +788,12 @@ Draw.loadPlugin(
      * Computes path to access data from request response depending on stored
      * apitypes targetted with its id stored in **live.apitype** attributes,
      * or with **live.source** attributes in object & graph base
-     * @param {string} nodeType Value for attribute live.api in selected node
-     * @param {string} nodeSource Value for attribute live.source in selected node
-     * @param {string} baseType Value for attribute live.api in graph base node
-     * @param {string} baseSource Value for attribute live.source in graph base node
+     * @param {Node} target Current handled graph node
+     * @param {Node} base Graph base node (with id=0)
      * @returns {string|function} Path from or method to transform corresponding
      * api response in order to get an exploitable object
      */
-    function getSourceForExploitableData(nodeType, nodeSource, baseType, baseSource) {
+    function getSourceForExploitableData(target, base) {
       // Gets "source" value if apitype is set
       function getFromApitype(apitype) {
         if(apitype) {
@@ -809,8 +807,13 @@ Draw.loadPlugin(
         }
         return false;
       }
-      return getFromApitype(nodeType) ? getFromApitype(nodeType)
-      : (nodeSource) ? nodeSource
+      const targetType = target.getAttribute(live.apitype);
+      const baseType = base.getAttribute(live.apitype);
+      const targetSource = target.getAttribute(live.source);
+      const baseSource = base.getAttribute(live.source);
+
+      return getFromApitype(targetType) ? getFromApitype(targetType)
+      : (targetSource) ? targetSource
       : getFromApitype(baseType) ? getFromApitype(baseType)
       : (baseSource) ? baseSource
       : null;
@@ -1003,14 +1006,10 @@ Draw.loadPlugin(
 
               if(isComplexAttr) {
                 let parsed = null;
+                // Fetches & computes API complex response if not already stored
                 if(!targettedApi) {
                   const raw = {...updatedAttrValue};
-                  const source = getSourceForExploitableData(
-                    graphNode.getAttribute(live.apitype),
-                    graphNode.getAttribute(live.source),
-                    baseNode.getAttribute(live.apitype),
-                    baseNode.getAttribute(live.source),
-                  );
+                  const source = getSourceForExploitableData(graphNode, baseNode);
                   parsed = buildExploitableData(raw, source);
                   complexApiResponses.push({url, response: parsed});
                 }
