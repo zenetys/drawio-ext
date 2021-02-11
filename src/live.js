@@ -48,7 +48,7 @@ Draw.loadPlugin(
       nodes: [],
       timeout: 0,
       isInit: false,
-      graphPageId: "",
+      pageBaseId: undefined,
       mxUtilsRequestErrorMsg: "{\"status\": \"error\"}",
       formatPanel: {
         arePropertiesShown: false,
@@ -58,54 +58,62 @@ Draw.loadPlugin(
 
     /** Launches "Live" feature in webapp */
     function initPlugin() {
-        // Extract from original plugin animation.js
-        // https://github.com/jgraph/drawio/blob/master/src/main/webapp/plugins/animation.js
-        // Adds resource for action
-        mxResources.parse('animation=Animation...');
+      // Extract from original plugin animation.js
+      // https://github.com/jgraph/drawio/blob/master/src/main/webapp/plugins/animation.js
+      // Adds resource for action
+      mxResources.parse('animation=Animation...');
 
-        // Adds action
-        ui.actions.addAction('animation', function() {
-            if (this.animationWindow == null) {
-                // LATER: Check outline window for initial placement
-                this.animationWindow = new AnimationWindow(ui, (document.body.offsetWidth - 480) / 2, 120, 640, 480);
-                this.animationWindow.window.setVisible(true);
-            }
-            else {
-                this.animationWindow.window.setVisible(!this.animationWindow.window.isVisible());
-           }
-        });
-
-        // Autostart in chromeless mode
-        if (ui.editor.isChromelessView()) {
-            function startAnimation() {
-                var root = ui.editor.graph.getModel().getRoot();
-                var result = false;
-
-                if (root.value != null && typeof(root.value) == 'object') {
-                    var desc = root.value.getAttribute('animation');
-
-                    if (desc != null) {
-                        run(ui.editor.graph, desc.split('\n'), true);
-                        result = true;
-                    }
-                }
-
-                return result;
-            } // startAnimation()
-
-            // Wait for file to be loaded if no animation data is present
-            if (!startAnimation()) {
-                ui.editor.addListener('fileLoaded', restartScheduleUpdate);
-            }
+      // Adds action
+      ui.actions.addAction('animation', function() {
+        if (this.animationWindow == null) {
+          // LATER: Check outline window for initial placement
+          this.animationWindow = new AnimationWindow(ui, (document.body.offsetWidth - 480) / 2, 120, 640, 480);
+          this.animationWindow.window.setVisible(true);
         }
         else {
-            ui.format.showCloseButton = false;
-            ui.editor.addListener("fileLoaded", function() {
-                addLiveUpdatePalette();
-                addLiveTabToFormatPanel();
-                overrideFormatPanelRefresh();
-            });
+          this.animationWindow.window.setVisible(!this.animationWindow.window.isVisible());
         }
+      });
+
+      // Autostart in chromeless mode
+      if (ui.editor.isChromelessView()) {
+        function startAnimation() {
+          var root = ui.editor.graph.getModel().getRoot();
+          var result = false;
+
+          if (root.value != null && typeof(root.value) == 'object') {
+            var desc = root.value.getAttribute('animation');
+
+            if (desc != null) {
+              run(ui.editor.graph, desc.split('\n'), true);
+              result = true;
+            }
+          }
+
+          return result;
+        } // startAnimation()
+
+        // Wait for file to be loaded if no animation data is present
+        if (!startAnimation()) {
+          ui.editor.addListener('fileLoaded', restartScheduleUpdate);
+        }
+      }
+      else {
+        ui.format.showCloseButton = false;
+        ui.editor.addListener("fileLoaded", function() {
+          live.pageBaseId = ui.currentPage.root.getId();
+          addLiveUpdatePalette();
+          addLiveTabToFormatPanel();
+          overrideFormatPanelRefresh();
+          ui.editor.addListener(mxUtils.CHANGE, function() {
+            const currentPageBaseId = ui.currentPage.root.getId();
+            if(live.pageBaseId !== currentPageBaseId) {
+              if(live.thread) log("Refresh feature stopped due to graph page change");
+              resetScheduleUpdate();
+            }
+          });
+        });
+      }
     }
 
     /** Adds a new palette with buttons to handle the live feature state in the toolbar */
@@ -136,6 +144,7 @@ Draw.loadPlugin(
 
     /** Adds "Live" custom format tab in Format Panel */
     function addLiveTabToFormatPanel() {
+
       const formatContainer = document.querySelector(".geFormatContainer");
       const formatHeaders = formatContainer.firstChild;
       if(!formatHeaders) return;
@@ -232,7 +241,7 @@ Draw.loadPlugin(
       const graphXml = ui.editor.getGraphXml();
       const graph = ui.editor.graph;
       const liveFormatPanelContainer = document.createElement('section');
-      const targetId = graph.isSelectionEmpty() ? "0"
+      const targetId = graph.isSelectionEmpty() ? live.pageBaseId
       : graph.selectionModel.cells[0].getId();
 
       const baseAttributes = [
@@ -261,7 +270,11 @@ Draw.loadPlugin(
       function buildInput(text, attrName, targetId) {
         const emptyValue = "";
         const target = mxUtils.findNode(graphXml, "id", targetId);
-        const base = mxUtils.findNode(graphXml, "id", "0");
+        if(!target) {
+          return {cb: null, shortField: null, longField: null, label: null};
+        }
+
+        const base = mxUtils.findNode(graphXml, "id", live.pageBaseId);
         const value = target.getAttribute(attrName) || null;
 
         const cb = document.createElement('input');
@@ -288,7 +301,7 @@ Draw.loadPlugin(
          * Computes placeholder for "source" live format panel input.
          * Checks depend on nodes **live.apitype** & **live.source** attributes
          * @param {Node} target Targetted graph node 
-         * @param {Node} base Graph base node (with id=0)
+         * @param {Node} base Graph base node
          * @returns {string} Computed placeholder or default empty value
          */
         function getSourcePlaceholder(target, base) {
@@ -423,12 +436,13 @@ Draw.loadPlugin(
        * @returns The built subpanel
        */
       function buildSubpanel(title, targetId, baseInputs, graphNodeInputs) {
-        const isGraphNodeSelected = targetId !== "0";
+        const isGraphNodeSelected = (targetId !== live.pageBaseId);
         const subpanelContainer = new BaseFormatPanel().createPanel();
         subpanelContainer.style.padding = "12px";
         const titleContainer = new BaseFormatPanel().createTitle(title);
         titleContainer.style.width = "100%";
         subpanelContainer.appendChild(titleContainer);
+
 
         handlePanelInputs(baseInputs, subpanelContainer, targetId);
         if(isGraphNodeSelected) {
@@ -439,7 +453,7 @@ Draw.loadPlugin(
 
       liveFormatPanelContainer.appendChild(
         buildSubpanel(
-          targetId === "0" ? "Diagram" : "Object " + targetId,
+          targetId === live.pageBaseId ? "Diagram" : "Object " + targetId,
           targetId,
           baseAttributes,
           objectAttributes
@@ -608,11 +622,7 @@ Draw.loadPlugin(
     function updateLiveAttrInFormatPanel(targetId, attributeName, attributeValue = null) {
       const selectedCells = [...ui.editor.graph.selectionModel.cells];
       const graphXml = ui.editor.getGraphXml();
-      const target = mxUtils.findNode(
-        graphXml,
-        "id",
-        targetId
-      );
+      const target = mxUtils.findNode(graphXml, "id", targetId);
 
       attributeValue ? target.setAttribute(attributeName,attributeValue)
       : target.removeAttribute(attributeName);
@@ -623,7 +633,9 @@ Draw.loadPlugin(
       const msg = {
         prop: "Property " + attributeName + " ",
         action: attributeValue ? "added on " : "removed from ",
-        obj: targetId === "0" ? "graph base" : "object with id " + targetId        
+        obj: (targetId === live.pageBaseId) 
+        ? "graph base" 
+        : "object with id " + targetId
       }
       log(msg.prop + msg.action + msg.obj);
       resetScheduleUpdate();
@@ -657,8 +669,7 @@ Draw.loadPlugin(
           "rawResponse",
           source ? "return rawResponse." + source : "return rawResponse"
         )(raw)
-      ): (typeof source === "function") ? source(raw)
-      : raw;
+      ) : (typeof source === "function") ? source(raw) : raw;
       
       if(exploitableData) return exploitableData;
       else {
@@ -695,7 +706,7 @@ Draw.loadPlugin(
       live.nodes = [];
       live.isInit = false;
       live.timeout = 0;
-      live.graphPageId = "";
+      live.pageBaseId = ui.currentPage.root.getId();
       clearThread(live.thread);
     }
 
@@ -752,8 +763,8 @@ Draw.loadPlugin(
      * @param {Array} liveNodes List of identified graph live nodes
      */
     function findLiveNodes(graphElement, liveNodes = []) {
-      // node with id === 0 is not checked
-      if(graphElement.getAttribute("id") !== "0") {
+      // base not is not checked
+      if(graphElement.getAttribute("id") !== live.pageBaseId) {
         const elementId = graphElement.getAttribute("id");
 
         // checks if current node is live
@@ -857,8 +868,8 @@ Draw.loadPlugin(
      * @returns {string|object} Parsed API response
      */
     function computeApiResponse(url, isSimpleResponse, credentials) {
-      /** Fetches & returns data from distant API */
       function loadDataFromApi(url, credentials) {
+        /** Fetches & returns data from distant API */
         try {
           let req = undefined;
           if(credentials) {
@@ -882,8 +893,8 @@ Draw.loadPlugin(
         }
       }
 
-      /** Parses received response from distant API */
       function parseApiResponse(rawResponse, isSimpleResponse = true) {
+        /** Parses received response from distant API */
         const parsedResponse = rawResponse.getText();
         if(parsedResponse.trim() === live.mxUtilsRequestErrorMsg) {
           throw Error("No response received from request");
@@ -924,11 +935,11 @@ Draw.loadPlugin(
     function doUpdate() {
       clearThread(live.thread);
       const graphXml = ui.editor.getGraphXml();
-      const baseNode = mxUtils.findNode(graphXml, "id", "0");
-
+      const baseNode = mxUtils.findNode(graphXml, "id", live.pageBaseId);
+      // if(!live.isInit) 
       if(!live.isInit) {
+        // live.pageBaseId = ui.currentPage.root.getId();
         live.timeout = (+(baseNode.getAttribute(live.refresh) + "000")) || 10000;
-        live.graphPageId = ui.currentPage.node.id;
         live.nodes = findLiveNodes(graphXml);
         live.isInit = true;
       }
@@ -1037,22 +1048,10 @@ Draw.loadPlugin(
         }
         updatesList.appendChild(updateNode);
       }
-      // Appends "updates" filled node to the new doc & updates
-      // diagram or stops update pipeline if graph page changed
-      if(ui.currentPage.node.id === live.graphPageId) {
-        xmlUpdatesDoc.appendChild(updatesList);
-        ui.updateDiagram(
-          mxUtils.getXml(xmlUpdatesDoc)
-        );
-        live.thread = setTimeout(
-          doUpdate,
-          live.timeout
-        );
-      }
-      else {
-        log("Page changed, plugin stopped");
-        resetScheduleUpdate();
-      }
+      // Appends "updates" filled node to the new doc & updates diagram
+      xmlUpdatesDoc.appendChild(updatesList);
+      ui.updateDiagram(mxUtils.getXml(xmlUpdatesDoc));
+      live.thread = setTimeout(doUpdate, live.timeout);
     }
 
     function log(...text) {
