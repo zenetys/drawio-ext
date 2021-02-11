@@ -274,22 +274,9 @@ Draw.loadPlugin(
       let targetId = undefined;
       if(graph.isSelectionEmpty()) targetId = live.pageBaseId;
       else targetId = graph.selectionModel.cells[0].getId();
-
-      const baseAttributes = [
-        ["API", LIVE_API],
-        ["API Type", LIVE_APITYPE],
-        ["Username", LIVE_USERNAME],
-        ["Password", LIVE_PASSWORD],
-        ["API Key", LIVE_APIKEY],
-        ["Source", LIVE_SOURCE],
-        ["Refresh", LIVE_REFRESH],
-      ];
-      const objectAttributes = [ 
-        // Displayed only if a node is selected in the graph
-        ["Object", LIVE_DATA],
-        ["Text", LIVE_TEXT],
-        ["Style", LIVE_STYLE],
-      ];
+      const target = mxUtils.findNode(graphXml, "id", targetId);
+      if(!target) return;
+      const isSelectionMode = !graph.isSelectionEmpty();
 
       /**
        * Builds an input section in the Live format panel
@@ -298,92 +285,99 @@ Draw.loadPlugin(
        * @param {string} targetId Targetted graph node id
        * @returns {object} Set of all HTML elements for the input
        */
-      function buildInput(text, attrName, targetId) {
-        const emptyValue = "";
-        const target = mxUtils.findNode(graphXml, "id", targetId);
+      function buildInput(text, attrName, target) {
         if(!target) return {cb: null, shortField: null, longField: null, label: null};
-
+        const targetId = target.getAttribute("id");
+        const emptyValue = "";
         const base = mxUtils.findNode(graphXml, "id", live.pageBaseId);
-        const value = target.getAttribute(attrName) || null;
+        const attrValue = target.getAttribute(attrName) || null;
 
         const cb = document.createElement('input');
         cb.setAttribute('type', 'checkbox');
         cb.style.margin = '3px 3px 0px 0px';
-        cb.checked = value;
+        cb.checked = attrValue;
         cb.title = (cb.checked ? "Remove" : "Add") + " attribute";
 
         const label = document.createElement("label");
+        label.style.textOverflow = "ellipsis";
         mxUtils.write(label, text);
-  
-        const shortField = document.createElement('input');
-        shortField.style.backgroundColor = "white";
-        shortField.style.width = "60%";
-        shortField.style.height = "20px";
-        shortField.style.float = "right";
-        shortField.type = "text";
-        shortField.style.border = "1px solid " + ui.format.inactiveTabBackgroundColor;
-        shortField.value = value;
-        shortField.style.borderRadius = "0px";
-        shortField.style.fontStyle = (value) ? "normal" : "italic";
-        
-        /**
-         * Computes placeholder for "source" live format panel input.
-         * Checks depend on nodes **LIVE_APITYPE** & **LIVE_SOURCE** attributes
-         * @param {Node} target Targetted graph node 
-         * @param {Node} base Graph base node
-         * @returns {string} Computed placeholder or default empty value
-         */
-        function getSourcePlaceholder(target, base) {
-          /**
-           * Computes source placeholder depending on 
-           * checked node **LIVE_APITYPE** attribute value
-           * @param {Node} elt Current checked node
-           */
-          function checkApitype(elt) {
-            if(elt.hasAttribute(LIVE_APITYPE)) {
-              const apiType = live.apitypes.find(
-                (api) => (api.id === elt.getAttribute(LIVE_APITYPE))
-              );
 
-              if(apiType) {
-                return `api ${apiType.id} => ${apiType.source || "Function"}`;
+        /**
+         * Creates an input or textarea field depending on hrmlTag value
+         * @param {string} htmlTag HTML node name
+         * @returns {HTMLElement} Created node
+         */
+        function createField(htmlTag) {
+          const elt = document.createElement(htmlTag);
+          elt.value = attrValue;
+          elt.style.boxSizing = "border-box";
+          elt.style.margin = "0";
+          elt.style.padding = "0";
+          elt.style.border = "1px solid " + ui.format.inactiveTabBackgroundColor;
+          elt.style.borderRadius = "0px";
+          elt.style.fontStyle = (attrValue) ? "normal" : "italic";
+          elt.style.backgroundColor = "white";
+          if(htmlTag === "input") {
+            elt.style.width = live.isLiveProperty(attrName) ? "55%" : "60%";
+            elt.type = "text";
+            elt.style.height = "20px";
+            elt.style.float = "right";
+          } else if(htmlTag === "textarea") {
+            elt.style.width = "100%";
+            elt.rows = 5;
+            elt.style.resize = "vertical";
+            elt.style.display = "none";
+            elt.style.outline = "none";
+          }
+                  
+          /**
+           * Computes placeholder for "source" live format panel input.
+           * Checks depend on nodes **LIVE_APITYPE** & **LIVE_SOURCE** attributes
+           * @param {Node} target Targetted graph node 
+           * @param {Node} base Graph base node
+           * @returns {string} Computed placeholder or default empty value
+           */
+          function getSourcePlaceholder(target, base) {
+            /**
+             * Computes source placeholder depending on 
+             * checked node **LIVE_APITYPE** attribute value
+             * @param {Node} elt Current checked node
+             */
+            function checkApitype(elt) {
+              if(elt.hasAttribute(LIVE_APITYPE)) {
+                const apiType = live.apitypes.find(
+                  (api) => (api.id === elt.getAttribute(LIVE_APITYPE))
+                );
+
+                if(apiType) {
+                  return `api ${apiType.id} => ${apiType.source || "Function"}`;
+                }
               }
+              return false;
             }
-            return false;
+
+            if(checkApitype(target)) return checkApitype(target);
+            else if(checkApitype(base)) return checkApitype(base);
+            else if(base.hasAttribute(LIVE_SOURCE)) return base.getAttribute(LIVE_SOURCE);
+            else return emptyValue;
           }
 
-          if(checkApitype(target)) return checkApitype(target);
-          else if(checkApitype(base)) return checkApitype(base);
-          else if(base.hasAttribute(LIVE_SOURCE)) return base.getAttribute(LIVE_SOURCE);
-          else return emptyValue;
+          if (attrName === LIVE_APITYPE) {
+            elt.placeholder = "raw";
+          }
+          else if(attrName === LIVE_SOURCE) {
+            elt.placeholder = getSourcePlaceholder(target, base);
+          }
+          else if(base.hasAttribute(attrName)) {
+            elt.placeholder = base.getAttribute(attrName);
+          }
+          else elt.placeholder = emptyValue;
+            
+          return elt;
         }
 
-        if (attrName === LIVE_APITYPE) {
-          shortField.placeholder = "raw";
-        }
-        else if(attrName === LIVE_SOURCE) {
-          shortField.placeholder = getSourcePlaceholder(target, base);
-        }
-        else if(base.hasAttribute(attrName)) {
-          shortField.placeholder = base.getAttribute(attrName);
-        }
-        else shortField.placeholder = emptyValue;
-
-        const longField = document.createElement("textarea");
-        longField.rows = 5;
-        longField.style.boxSizing = "border-box";
-        longField.style.width = "100%";
-        longField.style.padding = "0px";
-        longField.style.margin = "0px";
-        longField.style.backgroundColor = "white";
-        longField.style.resize = "none";
-        longField.style.border = "1px solid " + ui.format.inactiveTabBackgroundColor;
-        longField.style.display = "none";
-        longField.style.outline = "none";
-        longField.style.borderRadius = "0px";
-        longField.value = value;
-        longField.placeholder = shortField.placeholder;
-        longField.style.fontStyle = (value) ? "normal" : "italic";
+        const shortField = createField("input");
+        const longField = createField("textarea");
 
         // INPUTS EVENT HANDLERS \\
         function handleKeyDownOnTextInput(e) {
@@ -395,12 +389,7 @@ Draw.loadPlugin(
           }
         }
         function handleFocusoutOfTextInput() {
-          const initialValue = mxUtils.findNode(
-            graphXml, 
-            "id", 
-            targetId
-          ).getAttribute(attrName) || "";
-          
+          const initialValue = target.getAttribute(attrName) || "";
           if(initialValue !== longField.value) {
             updateLiveAttrInFormatPanel(targetId, attrName, longField.value);
           }
@@ -437,9 +426,9 @@ Draw.loadPlugin(
        * Builds inputs then appends its to the Live format panel container
        * @param {Array<object>} inputsList List of data for the input build
        * @param {HTMLElement} container Inputs HTML container
-       * @param {string} targetId Targetted graph node id
+       * @param {Node} targetId Targetted graph node
        */
-      function handlePanelInputs(inputsList, container, targetId) {
+      function handleSubpanelInputs(container, target, inputsList) {
         for(const input of inputsList) {
           const [text, attributeName] = input;
 
@@ -452,7 +441,7 @@ Draw.loadPlugin(
           const {cb, shortField, longField, label} = buildInput(
             text,
             attributeName,
-            targetId
+            target
           );
 
           inputSection.append(cb, label, shortField, longField);
@@ -463,122 +452,53 @@ Draw.loadPlugin(
       /**
        * Builds a subpanel in the Live Format Panel
        * @param {string} title Subpanel title
-       * @param {string} targetId Targetted graph node id
-       * @param {array<objects>} baseInputs List of base live attributes data
-       * @param {array<objects>} graphNodeInputs List of graph nodes attributes data
+       * @param {Node} target Targetted graph node
+       * @param {boolean} isSelectionMode True if a node is selected in the graph
        * @returns The built subpanel
        */
-      function buildSubpanel(title, targetId, baseInputs, graphNodeInputs) {
-        const isGraphNodeSelected = (targetId !== live.pageBaseId);
+      // function buildSubpanel(title, targetId, baseInputs, graphNodeInputs) {
+      function buildSubpanel(title, target, isSelectionMode = false) {
         const subpanelContainer = new BaseFormatPanel().createPanel();
         subpanelContainer.style.padding = "12px";
         const titleContainer = new BaseFormatPanel().createTitle(title);
         titleContainer.style.width = "100%";
         subpanelContainer.appendChild(titleContainer);
 
-        handlePanelInputs(baseInputs, subpanelContainer, targetId);
-        if(isGraphNodeSelected) {
-          handlePanelInputs(graphNodeInputs, subpanelContainer, targetId);
+        if(title !== "Properties") {  
+          const baseInputs = [
+            ["API", LIVE_API],
+            ["API Type", LIVE_APITYPE],
+            ["Username", LIVE_USERNAME],
+            ["Password", LIVE_PASSWORD],
+            ["API Key", LIVE_APIKEY],
+            ["Source", LIVE_SOURCE],
+            ["Refresh", LIVE_REFRESH],
+          ];
+          const graphNodeInputs = [ 
+            // Displayed only if a node is selected in the graph
+            ["Object", LIVE_DATA],
+            ["Text", LIVE_TEXT],
+            ["Style", LIVE_STYLE],
+          ];
+
+          handleSubpanelInputs(subpanelContainer, target, baseInputs);
+          if(isSelectionMode) {
+            handleSubpanelInputs(subpanelContainer, target, graphNodeInputs);
+          }
+        } else {
+          const propertyInputs = [];
+          for(const attr of target.attributes) {
+            if(live.isLiveProperty(attr.name)) {
+              const newLiveProperty = [
+                live.property.getName(attr.name),
+                attr.name
+              ];
+              propertyInputs.push(newLiveProperty);
+            }
+          }
+          handleSubpanelInputs(subpanelContainer, target, propertyInputs);
         }
         return subpanelContainer;
-      }
-
-      liveFormatPanelContainer.appendChild(
-        buildSubpanel(
-          (targetId === live.pageBaseId) ? "Diagram" : "Object " + targetId,
-          targetId,
-          baseAttributes,
-          objectAttributes
-        )
-      );
-
-      /**
-       * Builds "Properties" section of the Live format panel 
-       * @param {string} targetId Targetted graph object's id
-       */
-      function buildPropertiesSubpanel(targetId) {
-        const target = mxUtils.findNode(graphXml, "id", targetId);
-
-        const panelContainer = new BaseFormatPanel().createPanel();
-        panelContainer.style.padding = "0 12px 0 0";
-        const propertiesTable = document.createElement("table");
-        propertiesTable.classList.add("geProperties");
-        propertiesTable.style.whiteSpace = "nowrap";
-        propertiesTable.style.width = "100%";
-        propertiesTable.style.tableLayout = "fixed";
-        propertiesTable.style.borderCollapse = "collapse";
-        propertiesTable.style.backgroundClip = "padding-box";
-        panelContainer.appendChild(propertiesTable);
-
-        const tr = document.createElement("tr");
-        tr.classList.add("gePropHeader");
-        propertiesTable.appendChild(tr);
-        
-        const headerCells = [
-          [" ", "15px"],
-          ["Property", ""],
-          ["Value", "calc(211px * .6)"],
-        ];
-        for(const headerCell of headerCells) {
-          const th = document.createElement("th");
-          th.classList.add("gePropHeaderCell");
-          th.style.padding = "0";
-          const [content, width] = headerCell;
-          mxUtils.write(th, content);
-          th.style.width = width;
-          tr.appendChild(th);
-        }
-
-        for(const attribute of target.attributes) {
-          // if(attribute.name.startsWith(live.property.prefix)) {
-          if(live.isLiveProperty(attribute.name)) {
-            const newLine = document.createElement("tr");
-            newLine.classList.add("gePropNonHeaderRow");
-
-
-            const {cb, label, shortField, longField} = buildInput(
-              live.property.getName(attribute.name), 
-              attribute.name, 
-              targetId
-            );
-
-            shortField.style.width = "100%";
-            shortField.style.height = "20px";
-            shortField.style.float = "left";
-            shortField.style.boxSizing = "border-box";
-            longField.style.border = "1px solid " + ui.format.inactiveTabBackgroundColor;
-            longField.style.borderRadius = "0px";
-            const cells = [
-              cb, 
-              label, 
-              shortField
-            ];
-            cb.style.margin = "0";
-
-            for(const cellContent of cells) {
-              const td = document.createElement("td");
-                td.style.textAlign = cellContent === cb ? "center" : "left";
-                td.style.verticalAlign = "center";
-                td.style.padding = "0";
-
-              if(typeof cellContent === "string") {
-                mxUtils.write(td, cellContent);
-              } else {
-                td.appendChild(cellContent);
-              }
-              newLine.appendChild(td);
-            }
-
-            const longFieldCell = document.createElement("th");
-            longFieldCell.colSpan = "3";
-            longFieldCell.style.paddingLeft = "12px";
-            longFieldCell.appendChild(longField)
-
-            propertiesTable.appendChild(newLine);
-            propertiesTable.appendChild(longFieldCell);
-          }
-        }
-        return panelContainer;
       }
 
       /**
@@ -612,34 +532,52 @@ Draw.loadPlugin(
         mxUtils.write(validateBtn, "Add Live Property");
         validateBtn.style.width = "80%";
 
-        mxEvent.addListener(validateBtn, mxEvent.CLICK, function() {
-          if ((inputs.name.value !== "") && (inputs.value.value !== "")) {
+        function validateForm() {
+          const nameFieldIsEmpty = (inputs.name.value === "");
+          const valueFieldIsEmpty = (inputs.value.value === "");
+
+          if ((!nameFieldIsEmpty) && (!valueFieldIsEmpty)) {
             updateLiveAttrInFormatPanel(
               targetId, 
-              live.property.prefix + inputs.name.value,
-              inputs.value.value
+              live.property.prefix + inputs.name.value.trim(),
+              inputs.value.value.trim()
             );
             inputs.name.value = "";
             inputs.value.value = "";
           }
           else {
-            if(inputs.name.value === "") {
+            if(nameFieldIsEmpty) {
               log("New property must have a name !");
             }
-            if(inputs.value.value === "") {
+            if(valueFieldIsEmpty) {
               log("New property must have a value !");
             }
           }
-        });
+        }
+
+        function handleKeyDownOnInput(e) {
+          if(e.key === "Enter") validateForm();
+        }
+
+        mxEvent.addListener(validateBtn, mxEvent.CLICK, validateForm);
+        mxEvent.addListener(inputs.name, "keydown", handleKeyDownOnInput);
+        mxEvent.addListener(inputs.value, "keydown", handleKeyDownOnInput);
+
         formContainer.appendChild(validateBtn);
         return formContainer;
       }
 
-      // Adds node attributes & form to add a live attribute
-      // if a graph node is selected
-      if(!graph.isSelectionEmpty()) {
+      liveFormatPanelContainer.appendChild(
+        buildSubpanel(
+          (targetId === live.pageBaseId) ? "Diagram" : "Object " + targetId,
+          target,
+          isSelectionMode
+        )
+      );
+
+      if(isSelectionMode) {
         liveFormatPanelContainer.append(
-          buildPropertiesSubpanel(targetId),
+          buildSubpanel("Properties", target),
           buildNewPropertyForm(targetId)
         );
       }
