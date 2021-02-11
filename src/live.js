@@ -50,6 +50,7 @@ Draw.loadPlugin(
         prefix: "live.property.",
         getName: (fullPropName) => fullPropName.slice(live.property.prefix.length)
       },
+      isComplexAttribute: (attribute) => attribute.startsWith("="),
       isLiveAttribute: (attribute) => attribute.startsWith("live."),
       isLiveProperty: (attribute) => attribute.startsWith(live.property.prefix),
       mxUtilsRequestErrorMsg: "{\"status\": \"error\"}",
@@ -57,7 +58,19 @@ Draw.loadPlugin(
         arePropertiesShown: false,
         isDisplayed: false,
       },
-      credentialAttributes: [LIVE_USERNAME, LIVE_PASSWORD, LIVE_APIKEY],
+      all: [
+        LIVE_USERNAME,
+        LIVE_APIKEY,
+        LIVE_PASSWORD,
+        LIVE_API,
+        LIVE_APITYPE,
+        LIVE_REFRESH,
+        LIVE_STYLE,
+        LIVE_TEXT,
+        LIVE_DATA,
+        LIVE_SOURCE
+      ],
+      credentials: [LIVE_USERNAME, LIVE_PASSWORD, LIVE_APIKEY],
       unavailables: [
         LIVE_API,
         LIVE_REFRESH,
@@ -753,7 +766,7 @@ Draw.loadPlugin(
      */
     function getCredentials(target, base, isUrlPrefixed) {
       const credentials = {};
-      for(const crd of live.credentialAttributes) {
+      for(const crd of live.credentials) {
         if(isUrlPrefixed) credentials[crd] = base.getAttribute(live[crd]);
         else credentials[crd] =target.getAttribute(live[crd]);
       }
@@ -813,7 +826,17 @@ Draw.loadPlugin(
 
         // stores element id if element is live
         if(isLiveElement) {
-          liveNodes.push({graphNodeId: elementId,graphNode: graphElement});
+          const liveNode = {
+            graphNodeId: elementId,
+            graphNode: graphElement
+          };
+
+          if(graphElement.nodeName === "mxCell") {
+            console.log("cell ! (pas frieza)", elementId);
+            liveNode.isCell = true;
+          }
+
+          liveNodes.push(liveNode);
         }
       }
 
@@ -977,6 +1000,25 @@ Draw.loadPlugin(
       return obj;
     }
 
+    /**
+     * Handles case of mxCell containing live attributes without a parent object.  
+     * Moves live attributes from containing mxCell to its \<userObject> parent created by update process 
+     * @param {string} cellId Live cell's
+     */
+    function upgradeCellLiveNode(cellId) {
+      const graphXml = ui.editor.getGraphXml();
+      const parent = mxUtils.findNode(graphXml, "id", cellId);
+      const cell = parent.firstChild;
+
+      for(const liveAttribute of live.all) {
+        if(cell.hasAttribute(liveAttribute)) {
+          parent.setAttribute(liveAttribute, cell.getAttribute(liveAttribute));
+          cell.removeAttribute(liveAttribute);
+        }
+      }
+      ui.editor.setGraphXml(graphXml);
+    }
+
     /** Performs an update process */
     function doUpdate() {
       clearThread(live.thread);
@@ -994,7 +1036,7 @@ Draw.loadPlugin(
       const updatesList = xmlUpdatesDoc.createElement("updates");
       const complexApiResponses = [];
   
-      for(const {graphNode, graphNodeId} of live.nodes) {
+      for(const {graphNode, graphNodeId, isCell} of live.nodes) {
         if(!graphNodeId) continue;
         // Creates an update node for each targetted live node
         // which stores all updates for corresponding graph object
@@ -1022,7 +1064,7 @@ Draw.loadPlugin(
           // Targets attribute if attribut is valid live one
           if(isAvailableLiveAttribute()) {
             try {
-              const isComplexAttr = attrValue.startsWith("=");
+              const isComplexAttr = live.isComplexAttribute(attrValue);//.startsWith("=");
               let attributeUrl = undefined, isUrlPrefixed = undefined;
               if(isComplexAttr) {
                 attributeUrl = graphNode.getAttribute(LIVE_DATA);
@@ -1091,6 +1133,14 @@ Draw.loadPlugin(
       // Appends "updates" filled node to the new doc & updates diagram
       xmlUpdatesDoc.appendChild(updatesList);
       ui.updateDiagram(mxUtils.getXml(xmlUpdatesDoc));
+
+      for(const liveNode of live.nodes) {
+        if(liveNode.isCell) {
+          upgradeCellLiveNode(liveNode.graphNodeId);
+          delete liveNode.isCell;
+        }
+      }
+
       live.thread = setTimeout(doUpdate, live.timeout);
     }
 
