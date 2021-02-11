@@ -235,7 +235,7 @@ Draw.loadPlugin(
       const targetId = graph.isSelectionEmpty() ? "0"
       : graph.selectionModel.cells[0].getId();
 
-      const rootAttributes = [
+      const baseAttributes = [
         ["API", live.api],
         ["API Type", live.apitype],
         ["Username", live.username],
@@ -261,7 +261,7 @@ Draw.loadPlugin(
       function buildInput(text, attrName, targetId) {
         const emptyValue = "";
         const target = mxUtils.findNode(graphXml, "id", targetId);
-        const root = mxUtils.findNode(graphXml, "id", "0");
+        const base = mxUtils.findNode(graphXml, "id", "0");
         const value = target.getAttribute(attrName) || null;
 
         const cb = document.createElement('input');
@@ -287,11 +287,11 @@ Draw.loadPlugin(
         /**
          * Computes placeholder for "source" live format panel input.
          * Checks depend on nodes **live.apitype** & **live.source** attributes
-         * @param {Node} target targetted graph node 
-         * @param {Node} root graph root node 
+         * @param {Node} target Targetted graph node 
+         * @param {Node} base Graph base node (with id=0)
          * @returns {string} Computed placeholder or default empty value
          */
-        function getSourcePlaceholder(target, root) {
+        function getSourcePlaceholder(target, base) {
           /**
            * Computes source placeholder depending on 
            * checked node **live.apitype** attribute value
@@ -308,14 +308,14 @@ Draw.loadPlugin(
             } else return false;
           }
           return checkApitype(target) ? checkApitype(target)
-          : checkApitype(root) ? checkApitype(root) 
-          : root.hasAttribute(live.source) ? root.getAttribute(live.source)
+          : checkApitype(base) ? checkApitype(base) 
+          : base.hasAttribute(live.source) ? base.getAttribute(live.source)
           : emptyValue;
         }
 
         shortField.placeholder = (attrName === live.apitype) ? "raw"
-        : (attrName === live.source) ? getSourcePlaceholder(target, root)
-        : root.hasAttribute(attrName) ? root.getAttribute(attrName)
+        : (attrName === live.source) ? getSourcePlaceholder(target, base)
+        : base.hasAttribute(attrName) ? base.getAttribute(attrName)
         : emptyValue;
 
         const longField = document.createElement("textarea");
@@ -418,11 +418,11 @@ Draw.loadPlugin(
        * Builds a subpanel in the Live Format Panel
        * @param {string} title Subpanel title
        * @param {string} targetId Targetted graph node id
-       * @param {array<objects>} rootInputs List of root live attributes data
+       * @param {array<objects>} baseInputs List of base live attributes data
        * @param {array<objects>} graphNodeInputs List of graph nodes attributes data
        * @returns The built subpanel
        */
-      function buildSubpanel(title, targetId, rootInputs, graphNodeInputs) {
+      function buildSubpanel(title, targetId, baseInputs, graphNodeInputs) {
         const isGraphNodeSelected = targetId !== "0";
         const subpanelContainer = new BaseFormatPanel().createPanel();
         subpanelContainer.style.padding = "12px";
@@ -430,7 +430,7 @@ Draw.loadPlugin(
         titleContainer.style.width = "100%";
         subpanelContainer.appendChild(titleContainer);
 
-        handlePanelInputs(rootInputs, subpanelContainer, targetId);
+        handlePanelInputs(baseInputs, subpanelContainer, targetId);
         if(isGraphNodeSelected) {
           handlePanelInputs(graphNodeInputs, subpanelContainer, targetId);
         }
@@ -441,7 +441,7 @@ Draw.loadPlugin(
         buildSubpanel(
           targetId === "0" ? "Diagram" : "Object " + targetId,
           targetId,
-          rootAttributes,
+          baseAttributes,
           objectAttributes
         )
       );
@@ -623,7 +623,7 @@ Draw.loadPlugin(
       const msg = {
         prop: "Property " + attributeName + " ",
         action: attributeValue ? "added on " : "removed from ",
-        obj: targetId === "0" ? "graph root" : "object with id " + targetId        
+        obj: targetId === "0" ? "graph base" : "object with id " + targetId        
       }
       log(msg.prop + msg.action + msg.obj);
       resetScheduleUpdate();
@@ -654,19 +654,18 @@ Draw.loadPlugin(
     function buildExploitableData(raw, source) {
       const exploitableData = (typeof source === "string") ? (
         new Function(
-          "root",
-          source ? "return root." + source : "return root"
+          "rawResponse",
+          source ? "return rawResponse." + source : "return rawResponse"
         )(raw)
       ): (typeof source === "function") ? source(raw)
       : raw;
       
       if(exploitableData) return exploitableData;
       else {
-        throw Error(
-          "Error attempting to fetch data: 'apiResponse." + 
-          source + 
-          "' does not return anything"
-        );
+        const errorMsg = (typeof source === "function") 
+        ? "given function can't compute an exploitable object"
+        :"'apiResponse." + source + "' does not return anything";
+        throw Error("Error attempting to fetch data: " + errorMsg);
       }
     }
 
@@ -708,18 +707,18 @@ Draw.loadPlugin(
 
     /**
      * Gets credentials to perform requests to a distant api requiring authentication.  
-     * Use root crdentials data if url is prefixed by root's **live.api** attribute,
+     * Use live base credentials data if url is prefixed by base's **live.api** attribute,
      * otherwise use targetted graph node live attributes
      * @param {Node} target Targetted graph node
-     * @param {Node} root Graph root node
-     * @param {boolean} isUrlPrefixed True if url extends 
+     * @param {Node} base Graph node with id = 0
+     * @param {boolean} isUrlPrefixed True if url extends base's **live.api** attribute
      * @returns {object|null} credentials if exist or "null"
      */
-    function getCredentials(target, root, isUrlPrefixed) {
+    function getCredentials(target, base, isUrlPrefixed) {
       const credentials = {};
       for(const attribute of ["username", "apikey", "password"]) {
         credentials[attribute] = (isUrlPrefixed) 
-        ? root.getAttribute(live[attribute])
+        ? base.getAttribute(live[attribute])
         : target.getAttribute(live[attribute]);
       }
       return (credentials.username) ? credentials : null;
@@ -728,20 +727,20 @@ Draw.loadPlugin(
     /**
      * Computes the url to request the corresponding API
      * @param {string} url Value stored in live attribute
-     * @param {string} rootApi Value for **live.api** attribute stored in root
+     * @param {string} baseApi Value for **live.api** attribute stored in base node (with id = 0)
      * @param {string} nodeApi Value for **live.api** attribute stored in current object
      * @returns {string} The computed request url
      */
-    function buildUrl(url, rootApi, nodeApi) {
+    function buildUrl(url, baseApi, nodeApi) {
       let request = "";
       if(url) {
         request = url.startsWith("http") ? url        // absolute path
         : url.startsWith("/") ?                       // relative path using
-        (nodeApi) ? (nodeApi + url) : (rootApi + url) // object api or root api 
+        (nodeApi) ? (nodeApi + url) : (baseApi + url) // object api or base api 
         : null;                                       // error
       } else {
         request = (nodeApi) ? nodeApi
-        : (rootApi) ? rootApi : null;
+        : (baseApi) ? baseApi : null;
       }
       if(request === null) throw Error("url pattern is wrong");
       return request;
@@ -788,15 +787,15 @@ Draw.loadPlugin(
     /**
      * Computes path to access data from request response depending on stored
      * apitypes targetted with its id stored in **live.apitype** attributes,
-     * or with **live.source** attributes in object & graph root
+     * or with **live.source** attributes in object & graph base
      * @param {string} nodeType Value for attribute live.api in selected node
      * @param {string} nodeSource Value for attribute live.source in selected node
-     * @param {string} rootType Value for attribute live.api in graph root
-     * @param {string} rootSource Value for attribute live.source in graph root
+     * @param {string} baseType Value for attribute live.api in graph base node
+     * @param {string} baseSource Value for attribute live.source in graph base node
      * @returns {string|function} Path from or method to transform corresponding
      * api response in order to get an exploitable object
      */
-    function getSourceForExploitableData(nodeType, nodeSource, rootType, rootSource) {
+    function getSourceForExploitableData(nodeType, nodeSource, baseType, baseSource) {
       // Gets "source" value if apitype is set
       function getFromApitype(apitype) {
         if(apitype) {
@@ -812,8 +811,8 @@ Draw.loadPlugin(
       }
       return getFromApitype(nodeType) ? getFromApitype(nodeType)
       : (nodeSource) ? nodeSource
-      : getFromApitype(rootType) ? getFromApitype(rootType)
-      : (rootSource) ? rootSource
+      : getFromApitype(baseType) ? getFromApitype(baseType)
+      : (baseSource) ? baseSource
       : null;
     }
 
@@ -862,7 +861,7 @@ Draw.loadPlugin(
           if(credentials) {
             const {username, apikey, password} = credentials;
             req = new mxXmlRequest(
-              "https://labs.zenetys.com/api/d/TEST/word",
+              url,
               null,
               "GET",
               false,
@@ -876,8 +875,7 @@ Draw.loadPlugin(
 
           return req;
         } catch(e) {
-          const msgSuffix = isSimpleResponse ? " from " + url : "";
-          throw Error("Cannot load data" + msgSuffix);
+          throw Error(e.message);
         }
       }
 
@@ -899,7 +897,7 @@ Draw.loadPlugin(
         const parsedResponse = parseApiResponse(rawResponse, isSimpleResponse);
         return parsedResponse;
       } catch(e) {
-        throw Error("Error attempting to fetch data: " + e.message);
+        throw Error("Error attempting to fetch data from " + url + ": " + e.message);
       }
     }
 
@@ -923,10 +921,10 @@ Draw.loadPlugin(
     function doUpdate() {
       clearThread(live.thread);
       const graphXml = ui.editor.getGraphXml();
-      const rootNode = mxUtils.findNode(graphXml, "id", "0");
+      const baseNode = mxUtils.findNode(graphXml, "id", "0");
 
       if(!live.isInit) {
-        live.timeout = (+(rootNode.getAttribute(live.refresh) + "000")) || 10000;
+        live.timeout = (+(baseNode.getAttribute(live.refresh) + "000")) || 10000;
         live.graphPageId = ui.currentPage.node.id;
         live.nodes = findLiveNodes(graphXml);
         live.isInit = true;
@@ -979,26 +977,29 @@ Draw.loadPlugin(
 
               const url = buildUrl(
                 isComplexAttr ? graphNode.getAttribute(live.data) : attrValue,
-                rootNode.getAttribute(live.api),
+                baseNode.getAttribute(live.api),
                 graphNode.getAttribute(live.api)
-              );
-
-              const credentials = getCredentials(
-                graphNode,
-                rootNode,
-                isComplexAttr ? graphNode.getAttribute(live.data).startsWith("/")
-                : attrValue.startsWith("/")
               );
 
               const targettedApi = complexApiResponses.find(
                 (response => response.url === url)
               );
 
-              let updatedAttrValue = computeApiResponse(
-                url, 
-                !isComplexAttr, 
-                credentials
-              );
+              let updatedAttrValue = null;
+              if(!isComplexAttr || !targettedApi) {
+                const credentials = getCredentials(
+                  graphNode,
+                  baseNode,
+                  isComplexAttr ? graphNode.getAttribute(live.data).startsWith("/")
+                  : attrValue.startsWith("/")
+                );
+
+                updatedAttrValue = computeApiResponse(
+                  url, 
+                  !isComplexAttr, 
+                  credentials
+                );
+              }
 
               if(isComplexAttr) {
                 let parsed = null;
@@ -1007,12 +1008,13 @@ Draw.loadPlugin(
                   const source = getSourceForExploitableData(
                     graphNode.getAttribute(live.apitype),
                     graphNode.getAttribute(live.source),
-                    rootNode.getAttribute(live.apitype),
-                    rootNode.getAttribute(live.source),
+                    baseNode.getAttribute(live.apitype),
+                    baseNode.getAttribute(live.source),
                   );
                   parsed = buildExploitableData(raw, source);
                   complexApiResponses.push({url, response: parsed});
                 }
+
                 updatedAttrValue = fetchAttrValueFromExploitableData(
                   targettedApi ? targettedApi.response : parsed,
                   attrValue.slice(1)
