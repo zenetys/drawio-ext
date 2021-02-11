@@ -972,7 +972,7 @@ Draw.loadPlugin(
       // & the array which stores data for complex APIs
       const xmlUpdatesDoc = mxUtils.createXmlDocument();
       const updatesList = xmlUpdatesDoc.createElement("updates");
-      const complexApiResponses = [];
+      const apiResponses = [];
   
       for(const {graphNode, graphNodeId, isCell} of live.nodes) {
         if(!graphNodeId) continue;
@@ -1017,11 +1017,14 @@ Draw.loadPlugin(
                 baseNode.getAttribute(LIVE_API),
                 graphNode.getAttribute(LIVE_API)
               );
-              const targettedApi = complexApiResponses.find(
+
+              const targettedApi = apiResponses.find(
                 (response => response.url === url)
               );
-              let updatedAttrValue = null;
-              if(!isComplexAttr || !targettedApi) {
+
+
+              let updatedAttrValue = (targettedApi) ? targettedApi.response : null;
+              if(!targettedApi) {
                 const credentials = getCredentials(
                   graphNode,
                   baseNode,
@@ -1030,33 +1033,30 @@ Draw.loadPlugin(
 
                 updatedAttrValue = computeApiResponse(
                   url, 
-                  !isComplexAttr, 
+                  !isComplexAttr,
                   credentials
                 );
+
+                // Fetches & computes API complex response if not already stored
+                if(isComplexAttr) {
+                  const raw = {...updatedAttrValue};
+                  const source = getSourceForExploitableData(graphNode, baseNode);
+                  updatedAttrValue = buildExploitableData(raw, source);
+                }
+                apiResponses.push({
+                  url, 
+                  response: updatedAttrValue
+                });
               }
 
               if(isComplexAttr) {
-                let parsed = null;
-                // Fetches & computes API complex response if not already stored
-                if(!targettedApi) {
-                  const raw = {...updatedAttrValue};
-                  const source = getSourceForExploitableData(graphNode, baseNode);
-                  parsed = buildExploitableData(raw, source);
-                  complexApiResponses.push({url, response: parsed});
-                }
-
                 updatedAttrValue = fetchAttrValueFromExploitableData(
-                  (targettedApi) ? targettedApi.response : parsed,
+                  updatedAttrValue,
                   attrValue.slice(1)
                 );
-              } 
+              }
 
-              fillUpdateNode(
-                updateNode,
-                attrName,
-                updatedAttrValue,
-                style
-              );
+              fillUpdateNode(updateNode, attrName, updatedAttrValue, style);
             } catch(e) {
               log(
                 "Graph object id:", graphNodeId,
