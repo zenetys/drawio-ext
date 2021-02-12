@@ -133,10 +133,12 @@ Draw.loadPlugin(
           addLiveTabToFormatPanel();
           overrideFormatPanelRefresh();
           ui.editor.addListener(mxUtils.CHANGE, function() {
-            const currentPageBaseId = ui.currentPage.root.getId();
-            if(live.pageBaseId !== currentPageBaseId) {
-              if(live.thread) log("Refresh feature stopped due to graph page change");
-              resetScheduleUpdate();
+            if(ui && ui.currentPage && ui.currentPage.root) {
+              const currentPageBaseId = ui.currentPage.root.getId();
+              if(live.pageBaseId !== currentPageBaseId) {
+                if(live.thread) log("Refresh feature stopped due to graph page change");
+                resetScheduleUpdate();
+              }
             }
           });
         });
@@ -210,7 +212,7 @@ Draw.loadPlugin(
          * Displays Live Format Panel if liveTab is clicked
          * @param {HTMLElement} targettedTab Format Panel clicked tab
          */
-        function handleLiveFormatPanelDisplay(targettedTab) {
+        function handleLiveFormatPanelDisplay(targettedTab, liveContent) {
           if(targettedTab === liveTab) {
             // selected tab is Live => display Live Format Panel
             live.formatPanel.isDisplayed = true;
@@ -246,13 +248,15 @@ Draw.loadPlugin(
         }
 
         const liveContent = buildLiveFormatPanelContent();
-        if(live.formatPanel.isDisplayed) {
-          handleLiveFormatPanelDisplay(liveTab);
+        if(liveContent) {
+          if(live.formatPanel.isDisplayed) {
+            handleLiveFormatPanelDisplay(liveTab, liveContent);
+          }
+  
+          mxEvent.addListener(formatTabs, "click", function(e) {
+            handleLiveFormatPanelDisplay(e.target, liveContent);
+          });
         }
-
-        mxEvent.addListener(formatTabs, "click", function(e) {
-          handleLiveFormatPanelDisplay(e.target);
-        });
       }
     }
 
