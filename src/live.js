@@ -705,9 +705,10 @@ Draw.loadPlugin(
     function getCredentials(target, base, isUrlPrefixed) {
       const credentials = {};
       for(const crd of live.credentials) {
-        if(isUrlPrefixed) credentials[crd] = base.getAttribute(live[crd]);
-        else credentials[crd] =target.getAttribute(live[crd]);
+        if(isUrlPrefixed) credentials[crd.slice(5)] = base.getAttribute(crd);
+        else credentials[crd.slice(5)] = target.getAttribute(crd);
       }
+
       return (credentials.username) ? credentials : null;
     }
 
@@ -770,7 +771,6 @@ Draw.loadPlugin(
           };
 
           if(graphElement.nodeName === "mxCell") {
-            console.log("cell ! (pas frieza)", elementId);
             liveNode.isCell = true;
           }
 
@@ -887,8 +887,9 @@ Draw.loadPlugin(
               "GET",
               false,
               username,
-              password ? password : apikey
+              password
             )
+            req.withCredentials = true;
             req.send(); 
           } else {
             req = mxUtils.load(url);
@@ -1022,7 +1023,6 @@ Draw.loadPlugin(
                 (response => response.url === url)
               );
 
-
               let updatedAttrValue = (targettedApi) ? targettedApi.response : null;
               if(!targettedApi) {
                 const credentials = getCredentials(
@@ -1078,7 +1078,6 @@ Draw.loadPlugin(
           delete liveNode.isCell;
         }
       }
-
       live.thread = setTimeout(doUpdate, live.timeout);
     }
 
