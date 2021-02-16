@@ -703,17 +703,15 @@ Draw.loadPlugin(
      * otherwise use targetted graph node live attributes
      * @param {Node} target Targetted graph node
      * @param {Node} base Graph node with id = 0
-     * @param {boolean} isUrlPrefixed True if url extends base's **LIVE_API** attribute
      * @returns {object|null} credentials if exist or "null"
      */
-    function getCredentials(target, base, isUrlPrefixed) {
+    function getCredentials(target, base) {
       const credentials = {};
       for(const crd of live.credentials) {
-        if(isUrlPrefixed) credentials[crd.slice(5)] = base.getAttribute(crd);
-        else credentials[crd.slice(5)] = target.getAttribute(crd);
+        if(target.getAttribute(crd)) credentials[crd.slice(5)] = target.getAttribute(crd);
+        else credentials[crd.slice(5)] = base.getAttribute(crd);
       }
-
-      return (credentials.username) ? credentials : null;
+      return (credentials.username || credentials.apikey) ? credentials : null;
     }
 
     /**
@@ -879,49 +877,58 @@ Draw.loadPlugin(
      * @returns {string|object} Parsed API response
      */
     function computeApiResponse(url, isSimpleResponse, credentials) {
-      function loadDataFromApi(url, credentials) {
-        /** Fetches & returns data from distant API */
-        try {
-          let req = undefined;
-          if(credentials) {
-            const {username, apikey, password} = credentials;
-            req = new mxXmlRequest(
-              url,
-              null,
-              "GET",
-              false,
-              username,
-              password
-            )
-            req.withCredentials = true;
-            req.send(); 
-          } else {
-            req = mxUtils.load(url);
+      /** 
+       * Sets value for Authorization request header to access a protected API
+       * @param {object} credentials Object containing request credentials
+       * @returns {string} Value for the header
+       */
+      function getAuthorizationValue(credentials) {
+        const {username, password, apikey} = credentials;
+
+        if (username && password) {
+          return "Basic " + btoa(`${username}:${password}`);
+        } else if(apikey) {
+          return "Bearer " + apikey;
+        } else throw Error("Credentials malformed");
+      }
+      try {
+        let response = undefined;
+        if(credentials) {
+          const authorization = getAuthorizationValue(credentials);
+
+          const xhr = new XMLHttpRequest();
+          xhr.open("GET", url, false);
+          xhr.withCredentials = true;
+
+          const headers = [
+            ["Authorization", authorization]
+          ];
+
+          for(const header of headers) {
+            const [name, value] = header;
+            xhr.setRequestHeader(name, value);
           }
 
-          return req;
-        } catch(e) {
-          throw Error(e.message);
-        }
-      }
-
-      function parseApiResponse(rawResponse, isSimpleResponse = true) {
-        /** Parses received response from distant API */
-        const parsedResponse = rawResponse.getText();
-        if(parsedResponse.trim() === live.mxUtilsRequestErrorMsg) {
-          throw Error("No response received from request");
-        }
-        if(isSimpleResponse) {
-          return parsedResponse.replace(/"/g, "").trim();
+          xhr.onreadystatechange = function() {
+            if(xhr.readyState === 4) {
+              if(xhr.status >= 200 && xhr.status < 300) {
+                response = xhr.responseText.trim();
+              } else {
+                throw Error("Request failed");
+              }
+            }
+          }
+          
+          xhr.send();
         } else {
-          return JSON.parse(parsedResponse);
+          response = mxUtils.load(url).getText().trim();
+          if(response === live.mxUtilsRequestErrorMsg) {
+            throw Error("No response received from request");
+          }
         }
-      } 
 
-      try {
-        const rawResponse = loadDataFromApi(url, credentials);
-        const parsedResponse = parseApiResponse(rawResponse, isSimpleResponse);
-        return parsedResponse;
+        if(isSimpleResponse) return response.replace(/"/g, "").trim();
+        else return JSON.parse(response);
       } catch(e) {
         throw Error("Error attempting to fetch data from " + url + ": " + e.message);
       }
@@ -933,14 +940,14 @@ Draw.loadPlugin(
      * @returns rebuilt object
      */
     function hastatBuildObject(json) {
-      const obj = [];
+      const output = [];
       for (const e1 of json) {
         const t = [];
-        for (const e2 of e1)
-          t[e2.field.name] = e2.value.value;
-        obj[t["pxname"]][t["svname"]] = t;
+        for (const e2 of e1) t[e2.field.name] = e2.value.value;
+        if(!output[t["pxname"]]) output[t["pxname"]] = [];
+        output[t["pxname"]][t["svname"]] = t;
       }
-      return obj;
+      return output;
     }
 
     /**
@@ -1007,15 +1014,8 @@ Draw.loadPlugin(
           // Targets attribute if attribut is valid live one
           if(isAvailableLiveAttribute()) {
             try {
-              const isComplexAttr = live.isComplexAttribute(attrValue);//.startsWith("=");
-              let attributeUrl = undefined, isUrlPrefixed = undefined;
-              if(isComplexAttr) {
-                attributeUrl = graphNode.getAttribute(LIVE_DATA);
-                isUrlPrefixed = graphNode.getAttribute(LIVE_DATA).startsWith("/");
-              } else {
-                attributeUrl = attrValue;
-                isUrlPrefixed = attrValue.startsWith("/");
-              }
+              const isComplexAttr = live.isComplexAttribute(attrValue);
+              const attributeUrl = (isComplexAttr) ? graphNode.getAttribute(LIVE_DATA):attrValue;
 
               const url = buildUrl(
                 attributeUrl,
@@ -1024,18 +1024,13 @@ Draw.loadPlugin(
               );
 
               const targettedApi = apiResponses.find(
-                (response => response.url === url)
+                (response) => (response.url === url)
               );
 
-              let updatedAttrValue = (targettedApi) ? targettedApi.response : null;
+              let updatedAttrValue = (targettedApi) ? targettedApi.response : undefined;
               if(!targettedApi) {
-                const credentials = getCredentials(
-                  graphNode,
-                  baseNode,
-                  isUrlPrefixed
-                );
-
-                updatedAttrValue = computeApiResponse(
+                const credentials = getCredentials(graphNode, baseNode);
+                const rawResponse = computeApiResponse(
                   url, 
                   !isComplexAttr,
                   credentials
@@ -1043,14 +1038,11 @@ Draw.loadPlugin(
 
                 // Fetches & computes API complex response if not already stored
                 if(isComplexAttr) {
-                  const raw = {...updatedAttrValue};
                   const source = getSourceForExploitableData(graphNode, baseNode);
-                  updatedAttrValue = buildExploitableData(raw, source);
-                }
-                apiResponses.push({
-                  url, 
-                  response: updatedAttrValue
-                });
+                  updatedAttrValue = buildExploitableData(rawResponse, source);
+                } else updatedAttrValue = rawResponse;
+                
+                apiResponses.push({ url, response: updatedAttrValue });
               }
 
               if(isComplexAttr) {
@@ -1089,6 +1081,10 @@ Draw.loadPlugin(
       console.log("liveUpdate plugin:", ...text);
     }
 
-    initPlugin();
+
+    if(!ui.isLivePlugin) {
+      ui.isLivePlugin = true;
+      initPlugin();
+    }
   }
 );
