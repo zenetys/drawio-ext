@@ -624,6 +624,7 @@ Draw.loadPlugin(
      * Fetches the selected attribute value from computed exploitable API response
      * @param {object} exploitableData Parsed received response with 
      * @param {string} instructions js instructions list to retrieve value
+     * @returns {string} selected attribute updated value 
      */
     function fetchAttrValueFromExploitableData(exploitableData, instructions) {
       const updatedValue = new Function(
@@ -638,29 +639,30 @@ Draw.loadPlugin(
     /**
      * Transforms raw API response to exploitable data depending on source
      * @param {object} raw Raw received API response
-     * @param {string|function} source Path from raw or function to 
-     * handle raw to get exploitable data
+     * @param {object} computationDataset Required data to compute exploitable data from API raw response
      * @returns computed exploitable data
      */
-    function buildExploitableData(raw, source) {
-      const exploitableData = (typeof source === "string") ? (
-        new Function(
-          "rawResponse",
-          source ? "return rawResponse." + source : "return rawResponse"
-        )(raw)
-      ) : (typeof source === "function") ? source(raw) : raw;
+    function buildExploitableData(raw, computationDataset) {
+      const {source, post, apitypeId} = computationDataset;
+      const postProcessed = (post) ? post(raw) : raw;
       
-      if(exploitableData) return exploitableData;
-      else {
-        let msg = "";
-        if(typeof source === "function") {
-          msg = "given function can't compute an exploitable object";
-        } else {
-          msg = "'apiResponse." + source + "' does not return anything";
-        }
+      if (post && !postProcessed) throw Error(
+        "'post' function for apitype " + apitypeId + 
+        " can't compute an exploitable object"
+      );
 
-        throw Error("Error attempting to fetch data: " + msg);
+      const exploitable = new Function(
+        "rawResponse",
+        `return rawResponse${(source) ? "." + source : ""};`
+      )(postProcessed);
+
+      if(!exploitable) {
+        const withPost = (post) ? "after " + apitypeId + " post process" : "";
+        const withSource = (source) ? "with given path: " + source : "";
+        throw Error(`No data available from API ${withPost} ${withSource}`);
       }
+
+      return exploitable;
     }
 
     /** Stops refresh process & prevents multiple threads */
@@ -801,37 +803,47 @@ Draw.loadPlugin(
      * or with **LIVE_SOURCE** attributes in object & graph base
      * @param {Node} target Current handled graph node
      * @param {Node} base Graph base node
-     * @returns {string|function} Path from or method to transform corresponding
-     * api response in order to get an exploitable object
+     * @returns {object} Object containing data to  Path from or method to transform corresponding api response in order to get an exploitable object
      */
-    function getSourceForExploitableData(target, base) {
-      // Gets "source" value if apitype is set
-      function getFromApitype(apitype) {
-        if(apitype) {
-          const targettedApi = live.apitypes.find(
-            api => (api.id === apitype)
+    function getDataToFinalizeResponse(target, base) {
+      /**
+       * Gets data if "live.apitype" attribute is set in selected node
+       * @param {Node} currentNode Current selected node
+       * @param {string} currentSource Value for "live.source" attribute in currentNode
+       * @returns {object} Dataset required to get exploitable data from API response
+       */
+      function getFromApitype(currentNode, currentSource) {
+        const apitype = currentNode.getAttribute(LIVE_APITYPE);
+        if(!apitype) return false;
+
+        const targettedApi = live.apitypes.find(
+          api => (api.id === apitype)
+        );
+        if(!targettedApi) {
+          log(
+            "Value set in apitype (" 
+            + apitype 
+            + ") in object with id " 
+            + currentNode.getAttribute("id")
+            +" does not match any identified apitype"
           );
-          if(targettedApi) {
-            if(targettedApi.post) return targettedApi.post;
-            else return targettedApi.source;
-          }
+          return false;
         }
-        return false;
+
+        return {
+          apitypeId: targettedApi.id,
+          post: targettedApi.post,
+          source: (currentSource) ? currentSource : targettedApi.source
+        };
       }
-      const targetType = target.getAttribute(LIVE_APITYPE);
-      const baseType = base.getAttribute(LIVE_APITYPE);
       const targetSource = target.getAttribute(LIVE_SOURCE);
       const baseSource = base.getAttribute(LIVE_SOURCE);
 
-      if(getFromApitype(targetType)) {
-        return getFromApitype(targetType);
-      } else if(targetSource) {
-        return targetSource;
-      } else if(getFromApitype(baseType)) {
-        return getFromApitype(baseType);
-      } else if(baseSource) {
-        return baseSource;
-      } else return null; 
+      if(getFromApitype(target, targetSource))    return getFromApitype(target, targetSource);
+      else if(targetSource)                       return {source: targetSource};
+      else if(getFromApitype(base, baseSource))   return getFromApitype(base, baseSource);
+      else if(baseSource)                         return {source: baseSource};
+      else                                        return null; 
     }
 
     /**
@@ -1040,8 +1052,8 @@ Draw.loadPlugin(
 
                 // Fetches & computes API complex response if not already stored
                 if(isComplexAttr) {
-                  const source = getSourceForExploitableData(graphNode, baseNode);
-                  updatedAttrValue = buildExploitableData(rawResponse, source);
+                  const dataset = getDataToFinalizeResponse(graphNode, baseNode);
+                  updatedAttrValue = buildExploitableData(rawResponse, dataset);
                 } else updatedAttrValue = rawResponse;
                 
                 apiResponses.push({ url, response: updatedAttrValue });
