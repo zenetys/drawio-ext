@@ -177,7 +177,9 @@ Draw.loadPlugin(
       const formatTabs = formatContainer.firstChild;
       if(!formatTabs) return;
       const formatWidth = parseInt(formatContainer.style.width);
+      const formatTabsMax = ui.editor.graph.isSelectionEmpty() ? 3 : 4;
       const formatTabsNb = formatTabs.childNodes.length;
+      if(formatTabsNb >= formatTabsMax) return;
 
       // Adds tab only if formatWidth > 0 === format panel is displayed
       if(formatWidth > 0) {
@@ -986,7 +988,7 @@ Draw.loadPlugin(
       const updatesList = xmlUpdatesDoc.createElement("updates");
       const apiResponses = [];
   
-      for(const {graphNode, graphNodeId, isCell} of live.nodes) {
+      for(const {graphNode, graphNodeId} of live.nodes) {
         if(!graphNodeId) continue;
         // Creates an update node for each targetted live node
         // which stores all updates for corresponding graph object
