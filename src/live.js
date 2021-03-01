@@ -127,11 +127,17 @@ Draw.loadPlugin(
       }
       else {
         ui.format.showCloseButton = false;
-        ui.editor.addListener("fileLoaded", function() {
-          live.pageBaseId = ui.currentPage.root.getId();
-          addLiveUpdatePalette();
-          addLiveTabToFormatPanel();
-          overrideFormatPanelRefresh();
+        ui.editor.addListener("fileLoaded", function(e) {
+          // Inits live features on page wake & prevents multi loads
+          if(!ui.isLivePluginEnabled) {
+            ui.isLivePluginEnabled = true;
+            live.pageBaseId = ui.currentPage.root.getId();
+            addLiveUpdatePalette();
+            addLiveTabToFormatPanel();
+            overrideFormatPanelRefresh();
+          }
+
+          // Adds a listener to stop the ongoing update process if page changed
           ui.editor.addListener(mxUtils.CHANGE, function() {
             if(ui && ui.currentPage && ui.currentPage.root) {
               const currentPageBaseId = ui.currentPage.root.getId();
@@ -1095,10 +1101,6 @@ Draw.loadPlugin(
       console.log("liveUpdate plugin:", ...text);
     }
 
-
-    if(!ui.isLivePlugin) {
-      ui.isLivePlugin = true;
-      initPlugin();
-    }
+    initPlugin();
   }
 );
