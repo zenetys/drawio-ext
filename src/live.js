@@ -32,6 +32,7 @@ Draw.loadPlugin(
     const LIVE_TEXT = "live.text";
     const LIVE_DATA = "live.data";
     const LIVE_SOURCE = "live.source";
+    const LIVE_REF = "live.ref";
 
     const live = {
       pageBaseId: undefined,
@@ -39,36 +40,75 @@ Draw.loadPlugin(
       timeout: 0,
       isInit: false,
       nodes: [],
-      apitypes: [{
-        id: "elastic",
-        source: "hits.hits[0]._source"
-      },{
-        id: "hastat",
-        post: hastatBuildObject
-      }],
+      apitypes: [
+        { id: "elastic", source: "hits.hits[0]._source" },
+        { id: "hastat", post: hastatBuildObject }
+      ],
       property: {
         prefix: "live.property.",
         getName: (fullPropName) => fullPropName.slice(live.property.prefix.length)
       },
+      /**
+       * Checks if targetted live attribute is a complex one 
+       * (with js instructions) or if it is a simple one (containing an url)
+       * @param {string} attribute Targetted attribute value
+       * @returns {boolean} true if attribute is complex
+       */
       isComplexAttribute: (attribute) => attribute.startsWith("="),
+      
+      /**
+       * Checks if targetted live attribute handles an anonymous api
+       * receiving the updates value or if it contains js instructions
+       * to fetch updated value managing named APIs
+       * @param {string} attribute Targetted attribute value
+       * @returns {boolean} true if attribute references an anonymous API
+       */
+      isAnonAttribute: (attribute) => !attribute.startsWith("="),
+      
+      /**
+       * Checks if targetted attribute is a live attribute
+       * @param {string} attribute Targetted attribute name
+       * @returns {boolean} true if attribute is live
+       */
       isLiveAttribute: (attribute) => attribute.startsWith("live."),
+
+      /**
+       * Chacks if targetted attribute corresponds to an object's live property
+       * @param {string} attribute Targetted attribute name
+       * @returns {boolean} true if attribute is an object's live property
+       */
       isLiveProperty: (attribute) => attribute.startsWith(live.property.prefix),
+
+      /**
+       * Checks if targetted attribute is a live attribute & if it's not an unavailable one
+       * @param {string} attribute Targetted attribut ename
+       * @returns {boolean} True if attribute is an available live one
+       */
+      isAvailableLiveAttribute: (attribute) => {
+        if(!live.isLiveAttribute(attribute)) return false;
+        else {
+          for(const unavailableLiveAttribute of live.unavailables) {
+            if(attribute === unavailableLiveAttribute) return false;
+          }
+          return true;
+        }
+      },
       mxUtilsRequestErrorMsg: "{\"status\": \"error\"}",
       formatPanel: {
         arePropertiesShown: false,
         isDisplayed: false,
       },
       all: [
-        LIVE_USERNAME,
-        LIVE_APIKEY,
-        LIVE_PASSWORD,
-        LIVE_API,
-        LIVE_APITYPE,
-        LIVE_REFRESH,
-        LIVE_STYLE,
-        LIVE_TEXT,
-        LIVE_DATA,
-        LIVE_SOURCE
+        LIVE_USERNAME,  // "username" credential
+        LIVE_APIKEY,    // "apikey" credential
+        LIVE_PASSWORD,  // "password" credential
+        LIVE_API,       // root url
+        LIVE_APITYPE,   // if set, corresponds to a specific API (LIVE_SOURCE is autoset)
+        LIVE_REFRESH,   // time between 2 API calls in seconds
+        LIVE_STYLE,     // graph node's style
+        LIVE_TEXT,      // graph node's text
+        LIVE_DATA,      // Graph node API
+        LIVE_SOURCE     // path from received API response to get source object (autoset if LIVE_APITYPE is set)
       ],
       credentials: [LIVE_USERNAME, LIVE_PASSWORD, LIVE_APIKEY],
       unavailables: [
@@ -334,6 +374,7 @@ Draw.loadPlugin(
             elt.type = "text";
             elt.style.height = "20px";
             elt.style.float = "right";
+            elt.style.marginLeft = "auto";
           } else if(htmlTag === "textarea") {
             elt.style.width = "100%";
             elt.rows = 5;
@@ -449,7 +490,11 @@ Draw.loadPlugin(
           inputSection.style.whiteSpace = 'nowrap';
           inputSection.style.overflow = 'hidden';
           inputSection.style.fontWeight = "normal";
-  
+          inputSection.style.display = "flex";
+          inputSection.style.flexWrap = "wrap";
+          inputSection.style.justifyContent = "flex-start";
+          inputSection.style.alignItems = "center";
+
           const {cb, shortField, longField, label} = buildInput(
             text,
             attributeName,
@@ -468,7 +513,6 @@ Draw.loadPlugin(
        * @param {boolean} isSelectionMode True if a node is selected in the graph
        * @returns The built subpanel
        */
-      // function buildSubpanel(title, targetId, baseInputs, graphNodeInputs) {
       function buildSubpanel(title, target, isSelectionMode = false) {
         const subpanelContainer = new BaseFormatPanel().createPanel();
         subpanelContainer.style.padding = "12px";
@@ -648,7 +692,7 @@ Draw.loadPlugin(
      * @param {object} computationDataset Required data to compute exploitable data from API raw response
      * @returns computed exploitable data
      */
-    function buildExploitableData(raw, computationDataset) {
+    function buildExploitableData(raw, computationDataset = {}) {
       const {source, post, apitypeId} = computationDataset;
       const postProcessed = (post) ? post(raw) : raw;
       
@@ -713,7 +757,7 @@ Draw.loadPlugin(
      * otherwise use targetted graph node live attributes
      * @param {Node} target Targetted graph node
      * @param {Node} base Graph node with id = 0
-     * @returns {object|null} credentials if exist or "null"
+     * @returns {object|undefined} credentials if exist or "undefined"
      */
     function getCredentials(target, base) {
       const credentials = {};
@@ -721,7 +765,7 @@ Draw.loadPlugin(
         if(target.getAttribute(crd)) credentials[crd.slice(5)] = target.getAttribute(crd);
         else credentials[crd.slice(5)] = base.getAttribute(crd);
       }
-      return (credentials.username || credentials.apikey) ? credentials : null;
+      return (credentials.username || credentials.apikey) ? credentials : undefined;
     }
 
     /**
@@ -777,29 +821,22 @@ Draw.loadPlugin(
 
         // stores element id if element is live
         if(isLiveElement) {
-          const liveNode = {
-            graphNodeId: elementId,
-            graphNode: graphElement
-          };
-
-          if(graphElement.nodeName === "mxCell") {
-            liveNode.isCell = true;
-          }
-
+          const liveNode = { graphNodeId: elementId, graphNode: graphElement };
+          if(graphElement.nodeName === "mxCell") liveNode.isCell = true;
           liveNodes.push(liveNode);
         }
       }
 
       // if current element has children, finds live children
-      if(graphElement.children.length > 0) {
-        liveNodes = findLiveNodes(graphElement.firstChild, liveNodes);
-      }
+      if(graphElement.children.length > 0) liveNodes = findLiveNodes(
+        graphElement.firstChild, 
+        liveNodes
+      );
 
       // performs check for sibling
-      const sibling = graphElement.nextElementSibling
-      if(sibling !== null) {
-        liveNodes = findLiveNodes(sibling, liveNodes);
-      }
+      const sibling = graphElement.nextElementSibling;
+      if(sibling !== null) liveNodes = findLiveNodes(sibling, liveNodes);
+      
       return liveNodes;
     }
 
@@ -822,9 +859,7 @@ Draw.loadPlugin(
         const apitype = currentNode.getAttribute(LIVE_APITYPE);
         if(!apitype) return false;
 
-        const targettedApi = live.apitypes.find(
-          api => (api.id === apitype)
-        );
+        const targettedApi = live.apitypes.find(api => api.id === apitype);
         if(!targettedApi) {
           log(
             "Value set in apitype (" 
@@ -849,7 +884,7 @@ Draw.loadPlugin(
       else if(targetSource)                       return {source: targetSource};
       else if(getFromApitype(base, baseSource))   return getFromApitype(base, baseSource);
       else if(baseSource)                         return {source: baseSource};
-      else                                        return null; 
+      else                                        return undefined; 
     }
 
     /**
@@ -1008,31 +1043,19 @@ Draw.loadPlugin(
   
       for(const {graphNode, graphNodeId} of live.nodes) {
         if(!graphNodeId) continue;
-        // Creates an update node for each targetted live node
-        // which stores all updates for corresponding graph object
+        // Creates an update node which stores updates for all targetted live nodes
         const updateNode = xmlUpdatesDoc.createElement("update");
         updateNode.setAttribute("id", graphNodeId);
 
-        // gets selected graph node's style to prevent style rewriting
+        // Gets selected graph node's style to prevent style rewriting
         const style = (
           graphNode.firstChild.getAttribute("style") || 
           graphNode.getAttribute("style")
         );
 
-        for(const {name: attrName, value: attrValue} of graphNode.attributes) {
-          // Handles case of live attribute but not valid
-          function isAvailableLiveAttribute() {
-            if(!live.isLiveAttribute(attrName)) return false;
-            else {
-              for(const unavailableLiveAttribute of live.unavailables) {
-                if(attrName === unavailableLiveAttribute) return false;
-              }
-              return true;
-            }
-          }
-
-          // Targets attribute if attribut is valid live one
-          if(isAvailableLiveAttribute()) {
+        graphNode.attributes.forEach(({name: attrName, value: attrValue}) => {
+          // Targets attribute if attribute is valid live one
+          if(live.isAvailableLiveAttribute(attrName)) {
             try {
               const isComplexAttr = live.isComplexAttribute(attrValue);
               const attributeUrl = (isComplexAttr) ? graphNode.getAttribute(LIVE_DATA):attrValue;
@@ -1043,11 +1066,9 @@ Draw.loadPlugin(
                 graphNode.getAttribute(LIVE_API)
               );
 
-              const targettedApi = apiResponses.find(
-                (response) => (response.url === url)
-              );
-
+              const targettedApi = apiResponses.find(res => res.url === url);
               let updatedAttrValue = (targettedApi) ? targettedApi.response : undefined;
+
               if(!targettedApi) {
                 const credentials = getCredentials(graphNode, baseNode);
                 const rawResponse = computeApiResponse(
@@ -1081,26 +1102,26 @@ Draw.loadPlugin(
               );
             }
           }
-        }
+        });
         updatesList.appendChild(updateNode);
       }
       // Appends "updates" filled node to the new doc & updates diagram
       xmlUpdatesDoc.appendChild(updatesList);
       ui.updateDiagram(mxUtils.getXml(xmlUpdatesDoc));
 
-      for(const liveNode of live.nodes) {
+      /** Upgrades unwrapped graph live nodes */ 
+      live.nodes.forEach(liveNode => {
         if(liveNode.isCell) {
           upgradeCellLiveNode(liveNode.graphNodeId);
           delete liveNode.isCell;
         }
-      }
+      });
       live.thread = setTimeout(doUpdate, live.timeout);
     }
 
     function log(...text) {
       console.log("liveUpdate plugin:", ...text);
     }
-
     initPlugin();
   }
 );
