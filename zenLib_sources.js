@@ -1,38 +1,42 @@
 function getEnumList(enumType) {
-	const normalizeOutput = (arr) => arr.map(name => ({
+	const normalizeOutput = (list) => list.map(name => ({
 		val: name.toLowerCase(), 
 		dispName: name
 	}));
 
-	switch(enumType) {
-		case "needleStyles": return normalizeOutput(["Auto", "Bright", "Dark", "Custom"]);
-		case "speedometer": return [
-			{ val: "circle", dispName: "Circle" },
-			{ val: "half", dispName: "Half circle" },
-			{ val: "needle", dispName: "With needle" },
-		];
-		case "status": return normalizeOutput(["Ok", "Warning", "Critical", "Down", "Unknown"]);
-		default: return [];
-	}
-};
+	const enums = {
+		linear: ["Horizontal", "Vertical"],
+		needleStyles: ["Auto", "Bright", "Dark", "Custom"],
+		status: ["Ok", "Warning", "Critical", "Down", "Unknown"],
+		speedometer: [
+			["circle", "Circle"],
+			["half", "Half circle"],
+			["needle", "With needle"],
+		]
+	};
 
-const shapes = {
-	WEATHER_OK: "jZLBbsIwDIafJkeqpGGI6yiFyybtDaYApo2WxlXiduXt55IwtklIO0SyP9t/bCdCV920D6ZvX/EETuha6CogUrK6qQLnRCntSeitKEvJR5S7B1F1jcreBPD0n4IyFYzGDZBIApEuLoPYmn42u6mZ2yyibXwsvKEhQBEH/66F3rTUce9bxWaP1hOEeuQWYmYjBLJH417MAdwbRksWPccOSITdj4Rnx+ocIOyZmuwdYVZkECngB1TokL2tRw9zVuzhOE97thPwXJuzde6WI0q929W1lMzzrHwVTA/3dUV5WXvADihcOCUXLHSxVHIln5RWq+V6uVawUDqpfNoTtVlEprXLFmzT0h9oYgLNt/z9hdjIj3Rz75/hGvv1V74A",
-}
+	if(enumType === "speedometer") return enums[enumType].map(
+		([val, dispName]) => ({val, dispName})
+	);
+	else return normalizeOutput(enums[enumType] || []);
+};
 
 const inRange = (value, min = 0, max = 100) => Math.max(min, Math.min(max, value));
 
 function getUpdatedColor(color, isDarker = true) {
 	const length = color.length;
+	const limit = isDarker ? "0" : "f";
+	const [from, to] = isDarker ? ["a", "9"] : ["9", "a"];
 	let updatedColor = "";
+
 	for(let stringId = 0; stringId < length; stringId++) {
 		const char = color.charAt(stringId);
-		if(char === "#" || char === "0") updatedColor += char;
-		else if(char.toLowerCase() === "a") updatedColor += "9";
+		if(char === "#" || char === limit) 	updatedColor += char;
+		else if(char.toLowerCase() === from) 		updatedColor += to;
 		else {
 			const code = color.charCodeAt(stringId);
-			const updatedChar = String.fromCharCode(code - 1);
-			updatedColor += updatedChar
+			const updatedChar = String.fromCharCode((isDarker) ? (code -1) : (code +1));
+			updatedColor += updatedChar;
 		}
 	}
 	return updatedColor;
@@ -55,16 +59,16 @@ function addCustomProperty(name, type, shape, min = undefined, max = undefined, 
 	return property;
 }
 
-function getVariableValue(style, shape, variableKey, isStringArray = false) {
+function getVariableValue(selectedShape, variableKey, isStringArray = false) {
 	const variableValue = mxUtils.getValue(
-		style, 
-		variableKey,
-		shape.prototype.defaultValues[variableKey]
+		selectedShape.style, 
+		variableKey, 
+		selectedShape.defaultValues[variableKey]
 	);
 	return isStringArray ? variableValue.toString().split(",") : variableValue;
 }
 
-function getColor(percentage, colors, stages, defaultColor = "#000000") {
+function getGaugeColor(percentage, colors, stages, defaultColor = "#000") {
 	const loops = colors.length;
 	const lastLoop = loops - 1;
 
@@ -77,42 +81,51 @@ function getColor(percentage, colors, stages, defaultColor = "#000000") {
 	}
 }
 
-function addText(c, x, y, text, isPercentage = true) {
-	const parsedText = isPercentage ? `${parseInt(text, 10)}%` : text;
+const getStatusColor = (status) => ({
+	ok: "#0f0",
+	warning: "#ff8000",
+	critical: "#f00",
+	down: "#000",
+	// unknown: "#0fe", //! Test couleur
+	unknown: "#fe0",
+}[status]);
+
+function addText(c, x, y, text, options = {isPercentage: true, isHtml: false}) {
+	const {isPercentage, isHtml} = options;
+	const parsedText = (isPercentage) ? `${parseInt(text, 10)}%` : text;
+	const htmlText = (isHtml) ? "html" : null
+
 	c.begin();
-	c.text(x, y, 0, 0, parsedText, mxConstants.ALIGN_CENTER, mxConstants.ALIGN_MIDDLE, 0, null, 0, 0, 0);
+	c.text(x, y, 0, 0, parsedText, mxConstants.ALIGN_CENTER, mxConstants.ALIGN_MIDDLE, 0, htmlText, 0, 0, 0);
 	c.close();
 }
 
-//**************************************************************************************
-//Linear Gauge
-//**************************************************************************************
+// *************************************************************************************|
+// * Linear Gauge
+// *************************************************************************************|
 
-/** Extends mxShape */
 function zenetysShapeGaugeLinear(bounds, fill, stroke, strokewidth = 1) {
 	mxShape.call(this);
 	this.bounds = bounds;
 	this.fill = fill;
 	this.stroke = stroke;
 	this.strokewidth = strokewidth;
-	this.gaugePos = 25;
 };
 mxUtils.extend(zenetysShapeGaugeLinear, mxShape);
 
-/** Custom props & default values */
 zenetysShapeGaugeLinear.prototype.cst = {
   SCALE_COLORS : 'scaleColors',
   SCALE_STAGES : 'scaleStages',
   GAUGE_LABEL : 'gaugeLabel',
   TEXT_COLOR : 'textColor',
   TEXT_SIZE : 'textSize',
-  GAUGE_PERCENTAGE : 'percentage',
+  PERCENTAGE : 'percentage',
   SHAPE: 'zenShape.gauge.linear',
   GAUGE_TYPE : 'gaugeType',
 };
 
 zenetysShapeGaugeLinear.prototype.defaultValues = {
-	gaugeType: 0,
+	gaugeType: "horizontal",
 	scaleColors: '#00FF00,#FF8000,#FF0000',
 	scaleStages: '50,80',
 	textColor: '#000',
@@ -121,19 +134,19 @@ zenetysShapeGaugeLinear.prototype.defaultValues = {
 };
 
 function addLinearProperty(name, type, min = undefined, max = undefined) {
-	return addCustomProperty(name, type, zenetysShapeGaugeLinear, min, max);
+	const list = getEnumList("linear");
+	return addCustomProperty(name, type, zenetysShapeGaugeLinear, min, max, list);
 }
 
 zenetysShapeGaugeLinear.prototype.customProperties = [
 	addLinearProperty("percentage", 	"float", 0, 100),
-	addLinearProperty("gaugeType", 		"int",   0, 1),
+	addLinearProperty("gaugeType", 		"enum"),
 	addLinearProperty("scaleStages", 	"String"),
 	addLinearProperty("scaleColors", 	"String"),
 	addLinearProperty("textSize", 		"int"),
 	addLinearProperty("textColor", 		"color"),
 ];
 
-/** Paint the shape */
 zenetysShapeGaugeLinear.prototype.paintVertexShape = function(c, x, y, w, h) {
 	c.translate(x, y);
 	this.background(c, w, h);
@@ -143,7 +156,7 @@ zenetysShapeGaugeLinear.prototype.paintVertexShape = function(c, x, y, w, h) {
 
 zenetysShapeGaugeLinear.prototype.drawGauge = function(
 	c, w, h, 			// mxGraph stuff
-	orientation,	// 0 => horizontal | 1 => vertical
+	orientation,
 	color = '#FFF', 
 	percentage = 100, 
 	isOutline = false
@@ -154,7 +167,7 @@ zenetysShapeGaugeLinear.prototype.drawGauge = function(
 	c.setStrokeColor(color);
 	
 	c.begin();
-	orientation === 0 ? c.rect(
+	orientation === "horizontal" ? c.rect(
 		w * 0, 
 		h * 0, 
 		w * normalizedPercentage, 
@@ -171,36 +184,28 @@ zenetysShapeGaugeLinear.prototype.drawGauge = function(
 zenetysShapeGaugeLinear.prototype.background = function(c, w, h) {
 	const gaugeType = mxUtils.getValue(
 		this.style, 
-		zenetysShapeGaugeLinear.prototype.cst.GAUGE_TYPE, 
-		zenetysShapeGaugeLinear.prototype.defaultValues.gaugeType
+		this.cst.GAUGE_TYPE, 
+		this.defaultValues.gaugeType
 	);
-	zenetysShapeGaugeLinear.prototype.drawGauge(c,w,h, gaugeType);
+	this.drawGauge(c, w, h, gaugeType);
 };
 
 zenetysShapeGaugeLinear.prototype.foreground = function(c, w, h) {
-	const getLinearValue = (variableKey, isStringArray = false) => getVariableValue(
-		this.style, 
-		zenetysShapeGaugeLinear, 
-		zenetysShapeGaugeLinear.prototype.cst[variableKey],
-		isStringArray
-	);
+	const scaleColors = getVariableValue(this, "scaleColors", true);
+	const scaleStages = getVariableValue(this, "scaleStages", true);
+	const textColor = 	getVariableValue(this, "textColor");
+	const textSize =		getVariableValue(this, "textSize");
+	const gaugeType = 	getVariableValue(this, "gaugeType");
+	const percentage = 	inRange(getVariableValue(this, "percentage"));
 
-	const scaleColors = getLinearValue("SCALE_COLORS", true);
-	const scaleStages = getLinearValue("SCALE_STAGES", true);
-	const textColor = 	getLinearValue("TEXT_COLOR");
-	const textSize =		getLinearValue("TEXT_SIZE");
-	const gaugeType = 	getLinearValue("GAUGE_TYPE");
-	const percentage = 	inRange(getLinearValue("GAUGE_PERCENTAGE"));
-
-	const drawGauge = zenetysShapeGaugeLinear.prototype.drawGauge;
-	drawGauge(c,w,h, gaugeType, getColor(percentage, scaleColors, scaleStages), percentage); 	// draw fill
-	drawGauge(c,w,h, gaugeType, getColor(percentage, scaleColors, scaleStages), 100, true); 	// draw outline
+	const gaugeColor = getGaugeColor(percentage, scaleColors, scaleStages);
+	this.drawGauge(c, w, h, gaugeType, gaugeColor, percentage); 	// draw fill
+	this.drawGauge(c, w, h, gaugeType, gaugeColor, 100, true); 	// draw outline
 
 	c.setFontSize(textSize);
 	c.setFontColor(textColor);
 	
 	const textVerticalOffset = 10;
-	// add text
 	addText(c, w*.5, h + textVerticalOffset, percentage);
 };
 
@@ -229,7 +234,6 @@ Graph.handleFactory[zenetysShapeGaugeLinear.prototype.cst.SHAPE] = function(stat
 			);
 		}, 
 		function(bounds, pt) {
-		// this.state.style['percentage'] = Math.round(1000 * Math.max(0, Math.min(100, (pt.x - bounds.x) * 100 / bounds.width))) / 1000;
 		this.state.style['percentage'] = Math.round(
 			1000 * inRange((pt.x - bounds.x) * 100 / bounds.width)
 		) / 1000;
@@ -238,12 +242,11 @@ Graph.handleFactory[zenetysShapeGaugeLinear.prototype.cst.SHAPE] = function(stat
 	return handles;
 }
 
-//**************************************************************************************
-// Number Gauge
-//**************************************************************************************
+// *************************************************************************************|
+// * Number Gauge
+// *************************************************************************************|
 
 
-/** Extends mxShape */
 function zenetysShapeGaugeNumber(bounds, fill, stroke, strokewidth) {
 	mxShape.call(this);
 	this.bounds = bounds;
@@ -254,9 +257,8 @@ function zenetysShapeGaugeNumber(bounds, fill, stroke, strokewidth) {
 };
 mxUtils.extend(zenetysShapeGaugeNumber, mxShape);
 
-/** Custom props & default values */
 zenetysShapeGaugeNumber.prototype.cst = {
-	GAUGE_PERCENTAGE : 'percentage',
+	PERCENTAGE : 'percentage',
 	TEXT_SIZE : 'textSize',
 	STROKE_WIDTH: 'strokeWidth',
 	
@@ -269,7 +271,6 @@ zenetysShapeGaugeNumber.prototype.cst = {
 	OUTLINE_COLORS : 'outlineColors',
 	TEXT_COLORS : 'textColors',
 	
-	SHAPE : 'zenetys.mockup.gauge.number',
 	SHAPE : 'zenShape.gauge.number',
 };
 
@@ -305,7 +306,6 @@ zenetysShapeGaugeNumber.prototype.customProperties = [
 	addNumberProperty("textColors",		"String"),
 ];
 
-/** Paint the shape */
 zenetysShapeGaugeNumber.prototype.paintVertexShape = function(c, x, y, w, h) {
 	c.translate(x, y);
 	this.background(c, w, h);
@@ -320,33 +320,26 @@ zenetysShapeGaugeNumber.prototype.background = function(c, w, h) {
 };
 
 zenetysShapeGaugeNumber.prototype.foreground = function(c, w, h) {
-	const getNumberValue = (variableKey, isStringArray = false) => getVariableValue(
-		this.style,
-		zenetysShapeGaugeNumber,
-		zenetysShapeGaugeNumber.prototype.cst[variableKey],
-		isStringArray
-	);
-	
-	const percentage    = inRange(getNumberValue("GAUGE_PERCENTAGE"));
-	const textSize 			= getNumberValue("TEXT_SIZE");
-	const strokeWidth 	= getNumberValue("STROKE_WIDTH");
-	const isFilled 			= getNumberValue("IS_FILLED");
-	const isOutlined 		= getNumberValue("IS_OUTLINED");
-	const isColorized 	= getNumberValue("IS_COLORIZED");	
-	const stages 				= getNumberValue("STAGES", true);
-	const fillColors 		= getNumberValue("FILL_COLORS", true);
-	const outlineColors = getNumberValue("OUTLINE_COLORS", true);
-	const textColors 		= getNumberValue("TEXT_COLORS", true);
+	const percentage    = inRange(getVariableValue(this, "percentage"));
+	const textSize 			= getVariableValue(this, "textSize");
+	const strokeWidth 	= getVariableValue(this, "strokeWidth");
+	const isFilled 			= getVariableValue(this, "isFilled");
+	const isOutlined 		= getVariableValue(this, "isOutlined");
+	const isColorized 	= getVariableValue(this, "isColorized");	
+	const stages 				= getVariableValue(this, "stages", true);
+	const fillColors 		= getVariableValue(this, "fillColors", true);
+	const outlineColors = getVariableValue(this, "outlineColors", true);
+	const textColors 		= getVariableValue(this, "textColors", true);
 
 	const DEFAULT_FILLCOLOR = "#FFFFFF";
-	c.setFillColor(isFilled ? getColor(percentage, fillColors, stages):DEFAULT_FILLCOLOR);
+	c.setFillColor(isFilled ? getGaugeColor(percentage, fillColors, stages):DEFAULT_FILLCOLOR);
 	c.begin();
 	c.ellipse(0,0,w,h);
 	c.fill();
 
 	if (isOutlined) {
 		c.setStrokeColor(
-			getColor(percentage, outlineColors, stages)
+			getGaugeColor(percentage, outlineColors, stages)
 		);
 		c.setStrokeWidth(strokeWidth);
 		const normalized = strokeWidth / 100;
@@ -361,7 +354,7 @@ zenetysShapeGaugeNumber.prototype.foreground = function(c, w, h) {
 		c.setStrokeWidth(1); // set stroke default value
 	}
 	c.setFontSize(textSize);
-	if (isColorized) c.setFontColor(getColor(percentage, textColors, stages));
+	if (isColorized) c.setFontColor(getGaugeColor(percentage, textColors, stages));
 	addText(c, w * .5, h * .45, percentage);
 };
 
@@ -398,9 +391,9 @@ Graph.handleFactory[zenetysShapeGaugeNumber.prototype.cst.SHAPE] = function(stat
 	return handles;
 }
 
-//**************************************************************************************
-//Speedometer Gauge
-//**************************************************************************************
+// *************************************************************************************|
+// * Speedometer Gauge
+// *************************************************************************************|
 
 
 /** Extends mxShape */
@@ -416,7 +409,7 @@ mxUtils.extend(zenetysShapeGaugeSpeedometer, mxShape);
 /** Custom props & default values */
 zenetysShapeGaugeSpeedometer.prototype.cst = {
 	DISPLAY_TEXT: "displayText",
-	GAUGE_PERCENTAGE : "percentage",
+	PERCENTAGE : "percentage",
 	GAUGE_TYPE: "gaugeType",
   SCALE_COLORS : "scaleColors",
   SCALE_STAGES : "scaleStages",
@@ -424,6 +417,11 @@ zenetysShapeGaugeSpeedometer.prototype.cst = {
 	TEXT_COLOR: "textColor",
 	NEEDLE_STYLE: "needleStyle",
 	NEEDLE_COLOR: "needleColor",
+	BG_PRESET_COLORS: {
+		first: "#99FF99",
+		second: "#fffab3",
+		third: "#FFCC99"
+	},
 };
 
 zenetysShapeGaugeSpeedometer.prototype.defaultValues = {
@@ -435,6 +433,9 @@ zenetysShapeGaugeSpeedometer.prototype.defaultValues = {
 	textColor: "#000",
 	needleStyle: "auto",
 	needleColor: "#aaa",
+	needlePresetColors: ["#00FF00", "#FFEE00", "#FF8000"],
+	needlePresetStages: [33,66],
+
 };
 
 function addSpeedometerProperty(name, type, min = undefined, max = undefined, list = "") {
@@ -452,13 +453,6 @@ zenetysShapeGaugeSpeedometer.prototype.customProperties = [
 	addSpeedometerProperty("needleStyle", "enum", null, null, "needleStyles"),
 	addSpeedometerProperty("needleColor", "color"),
 ];
-
-const getSpeedometerValuesss = (variableKey, isStringArray = false, style) => getVariableValue(
-	style,
-	zenetysShapeGaugeSpeedometer,
-	zenetysShapeGaugeSpeedometer.prototype.cst[variableKey],
-	isStringArray
-);
 
 zenetysShapeGaugeSpeedometer.prototype.drawGauge = function (c,w,h, percentage, color, type, isOutline = false, withNeedle = false) {
 	const isCircle = (type === "circle");
@@ -516,7 +510,7 @@ zenetysShapeGaugeSpeedometer.prototype.drawGauge = function (c,w,h, percentage, 
 		}
 		const pos = getNeedlePos();
 		function getNeedleColor() {
-			if(style === "auto") return getColor(
+			if(style === "auto") return getGaugeColor(
 				needlePercentage, 
 				colors.map(getUpdatedColor), 
 				stages
@@ -574,42 +568,33 @@ zenetysShapeGaugeSpeedometer.prototype.paintVertexShape = function(c, x, y, w, h
 zenetysShapeGaugeSpeedometer.prototype.background = function(c, w, h) {
 	const gaugeType = mxUtils.getValue(
 		this.style,
-		zenetysShapeGaugeSpeedometer.prototype.cst.GAUGE_TYPE,
-		zenetysShapeGaugeSpeedometer.prototype.defaultValues.gaugeType
+		this.cst.GAUGE_TYPE,
+		this.defaultValues.gaugeType
 	);
-	const drawGauge = zenetysShapeGaugeSpeedometer.prototype.drawGauge;
 
 	if(gaugeType === "needle") {
-		drawGauge(c,w,h, [0, 33], "#99FF99", gaugeType);
-		drawGauge(c,w,h, [33, 66], "#fffab3", gaugeType);
-		drawGauge(c,w,h, [66, 100], "#FFCC99", gaugeType);
-	} else {
-		drawGauge(c,w,h, 100, "#FFF", gaugeType);
-	}
+		const {first, second, third} = this.cst.BG_PRESET_COLORS;
+		this.drawGauge(c,w,h, [0, 33], first, gaugeType);
+		this.drawGauge(c,w,h, [33, 66], second, gaugeType);
+		this.drawGauge(c,w,h, [66, 100], third, gaugeType);
+	} else this.drawGauge(c,w,h, 100, "#FFF", gaugeType);
 };
 
 zenetysShapeGaugeSpeedometer.prototype.foreground = function(c, w, h) {
-	const getSpeedometerValue = (variableKey, isStringArray = false) => getVariableValue(
-		this.style,
-		zenetysShapeGaugeSpeedometer,
-		zenetysShapeGaugeSpeedometer.prototype.cst[variableKey],
-		isStringArray
-	);
 	const getTextPosition = (gt) => gt === "circle" ? .5 : gt === "half" ? .8 : .15;
-	const needlePresetColors = ["#00FF00", "#FFEE00", "#FF8000"];
-	const needlePresetStages = [33,66];
+	const { needlePresetColors, needlePresetStages } = this.defaultValues;
 
-	const needleStyle	= getSpeedometerValue("NEEDLE_STYLE");
-	const needleColor	= getSpeedometerValue("NEEDLE_COLOR");
-	const displayText	= getSpeedometerValue("DISPLAY_TEXT");
-	const scaleStages = getSpeedometerValue("SCALE_STAGES", true);
-	const scaleColors = getSpeedometerValue("SCALE_COLORS", true);
-	const percentage	= getSpeedometerValue("GAUGE_PERCENTAGE");
-	const gaugeType   = getSpeedometerValue("GAUGE_TYPE");
+	const needleStyle	= getVariableValue(this, "needleStyle");
+	const needleColor	= getVariableValue(this, "needleColor");
+	const displayText	= getVariableValue(this, "displayText");
+	const scaleStages = getVariableValue(this, "scaleStages", true);
+	const scaleColors = getVariableValue(this, "scaleColors", true);
+	const percentage	= getVariableValue(this, "percentage");
+	const gaugeType   = getVariableValue(this, "gaugeType");
+	const textColor   = getVariableValue(this, "textColor");
 	const isNeedle		= (gaugeType === "needle");
-	const textColor   = getSpeedometerValue("TEXT_COLOR");
 	const fontSize    = h / (gaugeType === "circle" ? 4 : 3);
-	const currentColor = getColor(percentage, 
+	const currentColor = getGaugeColor(percentage, 
 		isNeedle ? needlePresetColors : scaleColors, 
 		isNeedle ? needlePresetStages : scaleStages
 	);
@@ -621,9 +606,8 @@ zenetysShapeGaugeSpeedometer.prototype.foreground = function(c, w, h) {
 		stages: needlePresetStages,
 	} : false;
 
-	const drawGauge = zenetysShapeGaugeSpeedometer.prototype.drawGauge;
-  drawGauge(c,w,h, percOutput, currentColor, gaugeType, false, withNeedle);	// draw gauge fill
-	if(!isNeedle) drawGauge(c,w,h, 100, currentColor, gaugeType, true);  			// draw gauge outline
+  this.drawGauge(c,w,h, percOutput, currentColor, gaugeType, false, withNeedle);	// draw gauge fill
+	if(!isNeedle) this.drawGauge(c,w,h, 100, currentColor, gaugeType, true);  			// draw gauge outline
 
 	if(displayText) {
 		c.setFontSize(fontSize);
@@ -665,188 +649,9 @@ Graph.handleFactory[zenetysShapeGaugeSpeedometer.prototype.cst.SHAPE] = function
 	return handles;
 }
 
-//********************************************************************************************
-//                                         Tachometer
-//********************************************************************************************
-
-/** Extends mxShape */
- function zenetysShapeGaugeTachometer(bounds, fill, stroke, strokewidth) {
-	mxShape.call(this);
-	this.bounds = bounds;
-	this.fill = fill;
-	this.stroke = stroke;
-	this.strokewidth = (strokewidth != null) ? strokewidth : 1;
-	this.gaugePos = 25;
-};
-mxUtils.extend(zenetysShapeGaugeTachometer, mxShape);
-
-/** Custom props & default values */
-zenetysShapeGaugeTachometer.prototype.cst = {
-	GAUGE_PERCENTAGE : 'percentage',
-  TEXT_SIZE : 'textSize',
-	DISPLAY_TEXT: "displayText",
-  SHAPE : 'zenShape.gauge.tachometer',
-};
-
-zenetysShapeGaugeTachometer.prototype.defaultValues = {
-  percentage: 25,
-  textSize: 18,
-	displayText: true,
-};
-
-function addTachometerProperty(name, type, min = undefined, max = undefined) {
-	return addCustomProperty(name, type, zenetysShapeGaugeTachometer, min, max);
-}
-
-zenetysShapeGaugeTachometer.prototype.customProperties = [
-	addTachometerProperty("percentage", "float", 0, 100),
-	addTachometerProperty("displayText", "bool"),
-	addTachometerProperty("textSize", "int"),
-];
-
-zenetysShapeGaugeTachometer.prototype.drawGauge = function (c,w,h, start, end, color, isOutline = false, withNeedle = false) {
-  function getVertex(c,w,h, pos, side) {
-		const arcHeight =.5; // 1 === full circle
-		const arcOrientation = 1.5;
-		const percentil = {
-			x: .5,
-			y: .5
-		};
-    const getGaugePos = (pos) => (
-			arcHeight * (2 * Math.PI * parseFloat(pos) / 100) + arcOrientation * Math.PI
-		);
-    const r = side === 'int' ? .25 : .50;
-    const x = w * percentil.x + w * r * Math.sin(getGaugePos(pos));
-    const y = (h * percentil.y - h * r * Math.cos(getGaugePos(pos)))* 2;
-    return { pos, x, y };
-  }
-
-  function drawArc(c, side, vertex) {
-    let rx, ry, sweep;
-    
-    if (side === 'int') {
-      rx = w * .25;
-      ry = h * .5;
-      sweep = 1;		// rotation horaire
-    } else {
-      rx = w * .5;
-      ry = h * 1;
-      sweep = 0;		// rotation antihoraire
-    }
-    
-    const largeArc = 0;    
-    c.arcTo(
-      rx,         // radius x
-      ry,         // radius y
-      0,	        // angle (effet penché dir haut-droite)
-      largeArc,	  // largeArcFlag (more than 180°)
-      sweep,	    // sweepFlag (direction)
-      vertex.x,	  // final pos x
-      vertex.y		// final pos y
-    );
-  }
-
-	function drawNeedle(c, endInt, endExt) {
-		const posX = ((endExt.x - endInt.x) / 3) + endInt.x;
-		const posY = ((endExt.y - endInt.y) / 3) + endInt.y;
-		c.setStrokeColor("#000");
-		c.begin();
-		c.moveTo(w * .5, h * 1);
-		c.lineTo(posX, posY);
-		c.stroke();
-		c.close();
-	}
-
-  // get vertices
-  const startInt = getVertex(c,w,h, start, 'int');
-  const startExt = getVertex(c,w,h, start, 'ext');
-  const endInt = getVertex(c,w,h, end, 'int');
-  const endExt = getVertex(c,w,h, end, 'ext');
-
-  // assign color to the new shape
-  c.setFillColor(color);      
-  c.setStrokeColor(color);
-
-  c.begin();                          // starts drawing the shape
-  c.moveTo(startInt.x, startInt.y);   // go to 1st vertex
-  drawArc(c, 'int', endInt);          // arc to 2nd vertex
-  c.lineTo(endExt.x, endExt.y);       // line to 3rd vertex
-  drawArc(c, 'ext', startExt, true);  // arc to 4th vertex	
-  c.close(); 													// line to 1st vertex to close the shape
-  isOutline ? c.stroke() : c.fill();  // stroke if is outline, or fill
-	if(withNeedle) drawNeedle(c, endInt, endExt);
-};
-
-/** Paint the shape */
-zenetysShapeGaugeTachometer.prototype.paintVertexShape = function(c, x, y, w, h) {
-	c.translate(x, y);
-	this.background(c, w, h);
-	c.setShadow(false);
-	this.foreground(c, w, h);
-};
-
-zenetysShapeGaugeTachometer.prototype.background = function(c, w, h) {
-	zenetysShapeGaugeTachometer.prototype.drawGauge(c,w,h, 0, 33, '#99FF99');
-	zenetysShapeGaugeTachometer.prototype.drawGauge(c,w,h, 33, 66, '#fffab3');
-	zenetysShapeGaugeTachometer.prototype.drawGauge(c,w,h, 66, 100, '#FFCC99');
-};
-
-zenetysShapeGaugeTachometer.prototype.foreground = function(c, w, h) {
-	const getTachometerValue = (variableKey, isStringArray = false) => getVariableValue(
-		this.style,
-		zenetysShapeGaugeTachometer,
-		zenetysShapeGaugeTachometer.prototype.cst[variableKey],
-		isStringArray
-	);
-	const percentage	= getTachometerValue("GAUGE_PERCENTAGE");
-	const textSize    = getTachometerValue("TEXT_SIZE");
-	const displayText = getTachometerValue("DISPLAY_TEXT");
-	const scaleStages = [33, 66];
-	const scaleColors = ["#00FF00", "#FFEE00", "#FF8000"];
-
-	const drawGauge = zenetysShapeGaugeTachometer.prototype.drawGauge;
-  drawGauge(c,w,h, 0, percentage, getColor(percentage, scaleColors, scaleStages), false, true);
-
-	c.setFontSize(textSize);
-	if(displayText) addText(c, w * .5, h * .2, percentage);
-};
-
-mxCellRenderer.registerShape(
-	zenetysShapeGaugeTachometer.prototype.cst.SHAPE, 
-	zenetysShapeGaugeTachometer
-);
-
-Graph.handleFactory[zenetysShapeGaugeTachometer.prototype.cst.SHAPE] = function(state) {
-	const handles = [Graph.createHandle(
-		state, 
-		['percentage'], 
-		function(bounds) {
-			const percentage = inRange(
-				parseFloat(
-					mxUtils.getValue(
-						this.state.style, 
-						'percentage', 
-						this.percentage
-					)
-				)
-			);
-			return new mxPoint(
-				bounds.x + bounds.width * .2 + percentage * .6 * bounds.width / 100,
-				bounds.y + bounds.height * .8
-			);
-		}, 
-		function(bounds, pt) {
-			this.state.style['percentage'] = Math.round(
-				1000 * inRange((pt.x - bounds.x) * 100 / bounds.width)
-			) / 1000;
-		}
-	)];
-	return handles;
-}
-
-//********************************************************************************************
-//                                          Pie Full
-//********************************************************************************************
+// *************************************************************************************|
+// * Pie Full
+// *************************************************************************************|
 
 /** Extends mxShape */
 function zenetysShapePieFull(bounds, fill, stroke, strokewidth) {
@@ -860,7 +665,6 @@ mxUtils.extend(zenetysShapePieFull, mxActor);
 
 /** Custom props */
 zenetysShapePieFull.prototype.cst = {
-	PIE : 'mxgraph.basic.pied',
 	SHAPE : 'zenShape.pie.full',
 	COLOR_1: "color1",
 	COLOR_2: "color2",
@@ -887,18 +691,10 @@ zenetysShapePieFull.prototype.customProperties = [
 zenetysShapePieFull.prototype.paintVertexShape = function(c, x, y, w, h) {
 	c.translate(x, y);
 
-	const getPieValue = (variableKey, isStringArray = false) => getVariableValue(
-		this.style,
-		zenetysShapePieFull,
-		zenetysShapePieFull.prototype.cst[variableKey],
-		isStringArray
-	);
-
 	const startAngle = 0;
-	const color1 = getPieValue("COLOR_1");
-	const color2 = getPieValue("COLOR_2");
-	let endAngle = 2 * Math.PI * inRange(parseFloat(getPieValue("END_ANGLE")), 0, 1);
-	if(endAngle === .5) endAngle = .4999; // if endAngle === .5 => display bug
+	const color1 = getVariableValue(this, "color1");
+	const color2 = getVariableValue(this, "color2");
+	const endAngle = 2 * Math.PI * inRange(parseFloat(getVariableValue(this, "endAngle")), 0, 1);
 
 	const rx = w * .5;
 	const ry = h * .5;
@@ -965,9 +761,9 @@ Graph.handleFactory[zenetysShapePieFull.prototype.cst.SHAPE] = function(state) {
 	return handles;
 };
 
-//**************************************************************************************
-// Weather Widget
-//**************************************************************************************
+// *************************************************************************************|
+// * Weather Widget
+// *************************************************************************************|
 
 /** Extends mxShape */
 function zenetysShapeWidgetWeather(bounds, fill, stroke, strokewidth = 1) {
@@ -983,6 +779,32 @@ mxUtils.extend(zenetysShapeWidgetWeather, mxShape);
 zenetysShapeWidgetWeather.prototype.cst = {
   SHAPE: 'zenShape.widget.weather',
 	STATUS: "status",
+	SUN_COLOR: "#FFEE00",
+	BEAMS: [
+		[[50,0], [43, 18], [57, 18]],			// up
+		[[50,100], [43, 82], [57, 82]],		// down
+		[[0,50], [18, 43], [18, 57]],			// left
+		[[100,50], [82, 43], [82, 57]],		// right
+		[[32, 23], [23, 32], [15,15]],		// ul
+		[[68, 23], [77, 32], [85,15]],		// ur				
+		[[68, 77], [77, 68], [85,85]],		// dr
+		[[32, 77], [23, 68], [15,85]],		// dl
+	],
+	CLOUD_COORDS: [
+		[.0, .2, .4, .3],
+		[.25, .5, .6, .25],
+		[.25, .0, .4, .3],
+		[.50, .13, .38, .35],
+		[.25, .2, .75, .4],
+		[.50, .1, .38, .35],
+		[.10, .35, .3, .35],
+	],
+	CLOUD_COLORS: {
+		warning: "#DEDEDE",
+		critical: "#CCC",
+		down: "#B3B3B3",
+		unknown: "#EDEDED",
+	}
 };
 
 zenetysShapeWidgetWeather.prototype.defaultValues = {
@@ -999,93 +821,60 @@ zenetysShapeWidgetWeather.prototype.customProperties = [{
 
 zenetysShapeWidgetWeather.prototype.paintVertexShape = function(c, x, y, w, h) {
 	c.translate(x, y);
-	// this.background(c, w, h);
 	c.setShadow(false);
 	this.foreground(c, w, h, x, y);
 };
 
-// zenetysShapeWidgetWeather.prototype.background = function(c, w, h) {
-// 	c.begin();
-// 	c.setFillColor("#333");
-// 	c.rect(0,0,w,h);
-// 	c.fill();
-// 	c.close();
-// };
-
 zenetysShapeWidgetWeather.prototype.foreground = function(c, w, h) {
-	const status = getVariableValue(
-		this.style, 
-		zenetysShapeWidgetWeather, 
-		zenetysShapeWidgetWeather.prototype.cst.STATUS,
-	);
+	const status = getVariableValue(this, "status");
 
-	function drawCloud(color) {
-		function drawEllipse(posx,posy, width, height) {
+	function drawCloud(cloudColor, cloudCoords) {
+		function drawEllipse(coords) {
+			const [posx,posy, width, height] = coords;
 			c.ellipse(w*posx, h*posy, w*width, h*height);
 			c.fill();
 		}
-		const cloudCoords = [
-			[.0, .2, .4, .3],
-			[.25, .5, .6, .25],
-			[.25, .0, .4, .3],
-			[.50, .13, .38, .35],
-			[.25, .2, .75, .4],
-			[.50, .1, .38, .35],
-			[.10, .35, .3, .35],
-		];
+
 		c.begin();
-		c.setFillColor(color);
-		cloudCoords.map(coords => drawEllipse(...coords));
+		c.setFillColor(cloudColor);
+		cloudCoords.map(drawEllipse);
 		c.close();
 	}
-	function drawSun() {
-		const SUNCOLOR = "#FFEE00";
-		function drawSunbeams() {
-			const BEAMS = [
-				[[50,0], [43, 18], [57, 18]],			// up
-				[[50,100], [43, 82], [57, 82]],		// down
-				[[0,50], [18, 43], [18, 57]],			// left
-				[[100,50], [82, 43], [82, 57]],		// right
-				[[32, 77], [23, 68], [15,85]],		// dl
-				[[68, 77], [77, 68], [85,85]],		// dr
-				[[32, 23], [23, 32], [15,15]],		// ul
-				[[68, 23], [77, 32], [85,15]],		// ur				
-			];
-			BEAMS.map(sunbeam => {
+	
+	function drawSun(sunColor, beams) {
+		function drawSunbeam(sunbeam) {
 				c.begin();
-				c.setFillColor(SUNCOLOR);				
+				c.setFillColor(sunColor);				
 				for(let dotId = 0; dotId < sunbeam.length; dotId++) {
-					const [posx,posy] = sunbeam[dotId].map((v, i) => (i === 0 ? w:h)*v/100);
+					const [posx,posy] = sunbeam[dotId].map(
+						(v, i) => (i === 0 ? w : h) * v / 100
+					);
 					(dotId === 0) ? c.moveTo(posx, posy) : c.lineTo(posx, posy);
 				}
 				c.fill();
 				c.close();
-			})
 		}
+
 		c.begin();
-		c.setFillColor(SUNCOLOR);
+		c.setFillColor(sunColor);
 		c.ellipse(w*.22,h*.22, w*.56, h*.56);
 		c.fill();
 		c.close();
-		drawSunbeams();
+		beams.map(drawSunbeam);
+
+
 	}
 
 	function drawStatus(status) {
-		function drawArea() {
-			const COLORS = {
-				warning: "#ff8000",
-				critical: "#f00",
-				down: "#000",
-				unknown: "#fe0",
-			}
+		function drawArea(color) {
 			c.begin();
-			c.setFillColor(COLORS[status]);
+			c.setFillColor(color);
 			c.ellipse(w*.5, h*.5, w*.5, h*.5);
 			c.fill();
 			c.close();
 		}
 
-		function drawPicto() {
+		function drawPicto(color) {
 			function normalizeValues(x, y, wx = null, hy = null) {
 				const normalized = [];
 				normalized.push(w * ((x * .005) + .5));
@@ -1094,8 +883,9 @@ zenetysShapeWidgetWeather.prototype.foreground = function(c, w, h) {
 				if(hy) normalized.push(h * ((hy * .005)));
 				return normalized;
 			}
+
 			c.begin();
-			c.setFillColor("#fff");
+			c.setFillColor(color);
 
 			switch(status) {
 				case "warning": {
@@ -1135,7 +925,7 @@ zenetysShapeWidgetWeather.prototype.foreground = function(c, w, h) {
 				case "unknown": {
 					c.setFontSize(w*.45);
 					c.setFontColor("#fff");
-					addText(c, w*.75, h*.66, "---", false);
+					addText(c, w*.75, h*.66, "---", {isPercentage: false});
 					break;
 				};
 				default: break;
@@ -1144,18 +934,13 @@ zenetysShapeWidgetWeather.prototype.foreground = function(c, w, h) {
 			c.fill();
 			c.close();
 		}
-		drawArea();
-		drawPicto();
+		drawArea(getStatusColor(status));
+		drawPicto("#fff");
 	}
-	if(status === "ok") drawSun();
+
+	if(status === "ok") drawSun(this.cst.SUN_COLOR, this.cst.BEAMS);
 	else {
-		const CLOUDCOLOR = {
-			warning: "#DEDEDE",
-			critical: "#CCC",
-			down: "#B3B3B3",
-			unknown: "#EDEDED",
-		}
-		drawCloud(CLOUDCOLOR[status]);
+		drawCloud(this.cst.CLOUD_COLORS[status], this.cst.CLOUD_COORDS);
 		drawStatus(status);
 	}
 };
@@ -1165,183 +950,44 @@ mxCellRenderer.registerShape(
 	zenetysShapeWidgetWeather
 );
 
-function zenetysShapeArrow() {
+// *********************************************************************************|
+// * Bicolore Line
+// *********************************************************************************|
+
+function zenetysShapeBicoloreLine() {
 	mxArrowConnector.call(this);
 }
-mxUtils.extend(zenetysShapeArrow, mxArrowConnector);
+mxUtils.extend(zenetysShapeBicoloreLine, mxArrowConnector);
 
-zenetysShapeArrow.prototype.cst = {
-	SHAPE: "zenShape.arrow",
+zenetysShapeBicoloreLine.prototype.cst = {
+	SHAPE: "zenShape.bicoloreLine",
 	START_COLOR: "startColor",
 	END_COLOR: "endColor",
 };
 
 function addArrowProperty(name, type = "color") {
-	return addCustomProperty(name, type, zenetysShapeArrow);
+	return addCustomProperty(name, type, zenetysShapeBicoloreLine);
 }
 
-zenetysShapeArrow.prototype.defaultValues = {
+zenetysShapeBicoloreLine.prototype.defaultValues = {
 	startColor: "#0F6E84",
 	endColor: "#17B8CE",
 };
 
-zenetysShapeArrow.prototype.customProperties = [
+zenetysShapeBicoloreLine.prototype.customProperties = [
 	addArrowProperty("startColor"),
 	addArrowProperty("endColor"),
 ];
 
-zenetysShapeArrow.prototype.paintEdgeShape = function(c, pts) {
+zenetysShapeBicoloreLine.prototype.paintEdgeShape = function(c, pts) {
+	const startColor = getVariableValue(this, "startColor");
+	const endColor = getVariableValue(this, "endColor");
+
 	const [start, end] = pts;
 	const middle = {
 		x: (start.x + end.x) * .5,
 		y: (start.y + end.y) * .5,
 	};
-
-	const computeDots = (vectorStart, vectorEnd, isIntern) => {
-		const distance = Math.hypot(
-			(vectorEnd.x - vectorStart.x), 
-			(vectorEnd.y - vectorStart.y)
-		);
-		const normalizedVector = {
-			x: ((vectorEnd.x - vectorStart.x) / distance),
-			y: ((vectorEnd.y - vectorStart.y) / distance)
-		};
-		const graduation = (axis, number, grades = 10) => vectorStart[axis] + ((number / grades * distance) * (normalizedVector[axis] !== 0 ? normalizedVector[axis] : 1))
-		
-		const startDot = {
-			x: graduation("x", -.25),
-			y: graduation("y", -.25),
-		}
-		const dot1 = {
-			x: graduation("x", 1),
-			// y: graduation("y", .5)
-			y: vectorStart.y + (1.1 * this.strokewidth)
-		};
-		const dot2 = {
-			x: graduation("x", 1),
-			y: vectorStart.y + (-1.1 * this.strokewidth)
-			// y: graduation("y", -.5)
-		};
-		const arrowMiddle = {
-			x: graduation("x", .8),
-			y: graduation("y", 0),
-		};
-		return { startDot, dot1, dot2, normalizedVector, arrowMiddle };
-	}
-
-	const computeDots2 = (vectorStart, vectorEnd, isIntern) => {
-		const distance = Math.hypot(
-			(vectorEnd.x - vectorStart.x), 
-			(vectorEnd.y - vectorStart.y)
-		);
-		const normalizedVector = {
-			x: ((vectorEnd.x - vectorStart.x) / distance),
-			y: ((vectorEnd.y - vectorStart.y) / distance)
-		};
-		// console.log({noNz: {x:distance*normalizedVector.x, y:distance*normalizedVector.y},distance,normalizedVector})
-
-		const angle = (function vectorsAngle(vector) {
-			const baseVector = {x:.707,y:.707};
-			const coefDir = (vector.y - baseVector.y) / (vector.x - baseVector.x);
-
-			// console.log("coefDir:" ,coefDir)
-
-			// const cos = (
-			// 	((baseVector.x * vector.x) + (baseVector.y * vector.y)) /
-			// 	(Math.hypot(baseVector.x, baseVector.y) * Math.hypot(vector.x, vector.y))
-			// );
-
-			// const scal = (vector.x * baseVector.x) + (vector.y * baseVector.y);
-
-			// console.log(vectorsAngle({x:1, y:1}))
-
-			// return Math.cos(cos) * 180 / Math.PI ;
-		})(normalizedVector);
-
-		// console.log("angle: ", angle)
-
-		const dot1 = {
-			r: distance*.2,
-			o: (angle + 30) * Math.PI / 180
-		};
-		const dot2 = {
-			r: distance*.2,
-			o: (angle + 330) * Math.PI / 180
-		};
-
-		function fromPolarToCart(dot) {
-			return {
-				x: vectorStart.x + ((dot.r * Math.cos(dot.o)) * normalizedVector.x),
-				y: vectorStart.y + ((dot.r * Math.sin(dot.o)) * normalizedVector.y),
-			};
-		}
-
-
-		return {
-			dot1: fromPolarToCart(dot1),
-			dot2: fromPolarToCart(dot2),
-		};
-	}
-
-	const computeDots3 = (vectorStart, vectorEnd, isIntern) => {
-		const distance = Math.hypot(
-			(vectorEnd.x - vectorStart.x), 
-			(vectorEnd.y - vectorStart.y)
-		);
-		const normalizedVector = {
-			x: ((vectorEnd.x - vectorStart.x) / distance),
-			y: ((vectorEnd.y - vectorStart.y) / distance)
-		};
-
-		const tempDot = {
-			x: vectorStart.x + distance*.2,
-			y: vectorStart.y + distance*.2,
-		}
-
-		const tempV = {
-			x: tempDot.x - vectorStart.x,
-			y: tempDot.y - vectorStart.y,
-		}
-
-
-
-		const mainV = {}
-		return {};
-	}
-	// const {startDot, dot1, dot2, arrowMiddle} = computeDots(start, middle);
-	// const { dot1, dot2 } = computeDots2(start, middle);
-
-
-	const arrows = {
-		start: {
-			ext: [
-				start,
-
-			],
-			int: [
-				middle,
-
-			]
-		},
-		end: {
-			ext: [
-				start,
-
-			],
-			int: [
-				middle,
-
-			]
-		},
-	};
-	const getArrowValue = (variableKey, isStringArray = false) => getVariableValue(
-		this.style,
-		zenetysShapeArrow,
-		zenetysShapeArrow.prototype.cst[variableKey],
-		isStringArray
-	);
-	const startColor = getArrowValue("START_COLOR");
-	const endColor = getArrowValue("END_COLOR");
 	
 	// draws line's first half
 	c.begin();
@@ -1350,20 +996,6 @@ zenetysShapeArrow.prototype.paintEdgeShape = function(c, pts) {
 	c.lineTo(middle.x, middle.y);
 	c.stroke();	
 	c.close();
-
-	// triangle
-	// c.begin();
-	// c.setStrokeColor("green");
-	// c.setFillColor("green");
-	// // c.moveTo(arrowMiddle.x, arrowMiddle.y);
-	// c.moveTo(dot1.x, dot1.y);
-	// c.lineTo(start.x, start.y);
-	// c.lineTo(dot2.x, dot2.y);
-	// // c.lineTo(arrowMiddle.x, arrowMiddle.y);
-	// // c.lineTo(startDot.x, startDot.y);
-	// // c.fill();
-	// c.fillAndStroke();
-	// c.close();
 
 	// draws line's second half
 	c.begin();
@@ -1375,13 +1007,13 @@ zenetysShapeArrow.prototype.paintEdgeShape = function(c, pts) {
 }
 
 mxCellRenderer.registerShape(
-	"zenShape.arrow", 
-	zenetysShapeArrow
+	zenetysShapeBicoloreLine.prototype.cst.SHAPE, 
+	zenetysShapeBicoloreLine
 );
 
-//**************************************************************************************
-// Status Widget
-//**************************************************************************************
+// *************************************************************************************|
+// * Status Widget
+// *************************************************************************************|
 
 function zenetysShapeWidgetStatus(bounds, fill, stroke, strokewidth = 1) {
 	mxShape.call(this);
@@ -1395,6 +1027,13 @@ mxUtils.extend(zenetysShapeWidgetStatus, mxShape);
 zenetysShapeWidgetStatus.prototype.cst = {
   SHAPE: "zenShape.widget.status",
 	STATUS: "status",
+	STATUS_LIST: {
+		ok: "✓",
+		warning: "!",
+		critical: "✚",
+		down: "✗",
+		unknown: "?", 
+	}
 };
 
 zenetysShapeWidgetStatus.prototype.customProperties = [{
@@ -1402,7 +1041,7 @@ zenetysShapeWidgetStatus.prototype.customProperties = [{
 	dispName: "Status",
 	type: "enum",
 	defVal: "ok",
-	enumList: [...getEnumList("status").slice(0,1), ...getEnumList("status").slice(2)]
+	enumList: getEnumList("status"),
 }];
 
 zenetysShapeWidgetStatus.prototype.defaultValues = {
@@ -1416,18 +1055,9 @@ zenetysShapeWidgetStatus.prototype.paintVertexShape = function(c, x, y, w, h) {
 };
 
 zenetysShapeWidgetStatus.prototype.foreground = function(c, w, h, x, y) {
-	console.log(x,y)
-	const STATUS_LIST = {
-		ok: ["#00FF00", "✓"],
-		critical: ["#FF8000", "!"],
-		down: ["#FF0000", "✗"],
-		unknown: ["#FFEE00", "?"],
-	};
-	const status = mxUtils.getValue(
-		this.style, "status",
-		zenetysShapeWidgetStatus.prototype.defaultValues.status
-	);
-	const [color, text] = STATUS_LIST[status];
+	const status = mxUtils.getValue(this.style, "status", this.defaultValues.status);
+	const text = this.cst.STATUS_LIST[status];
+	const color = getStatusColor(status);
 
 	// Draws circle
 	c.begin();
@@ -1439,16 +1069,12 @@ zenetysShapeWidgetStatus.prototype.foreground = function(c, w, h, x, y) {
 	// Draws text content
 	c.begin();
 	c.setFontSize(w*.9);
-	c.setFontColor("#FFFFFF");
+	c.setFontColor("#FFF");
 	c.setFontStyle("bold");
-	c.text(
-		w*.5, 
-		h*.5, 
-		0, 0, 
-		`<span style="font-weight:bold;">${text}</span>`, 
-		mxConstants.ALIGN_CENTER, 
-		mxConstants.ALIGN_MIDDLE, 
-		0, "html", 0, 0, 0
+	addText(
+		c, w*.5, h*.5, 
+		`<span style="font-weight:bold;">${text}</span>`,
+		{ isHtml: true }
 	);
 	c.close();
 };
