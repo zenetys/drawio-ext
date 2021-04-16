@@ -23,16 +23,16 @@ function getEnumList(enumType) {
 
 const inRange = (value, min = 0, max = 100) => Math.max(min, Math.min(max, value));
 
-function getUpdatedColor(color, isDarker = true) {
+function updateColor(color, isDarker = true) {
 	const length = color.length;
 	const limit = isDarker ? "0" : "f";
 	const [from, to] = isDarker ? ["a", "9"] : ["9", "a"];
 	let updatedColor = "";
 
 	for(let stringId = 0; stringId < length; stringId++) {
-		const char = color.charAt(stringId);
+		const char = color.charAt(stringId).toLowerCase();
 		if(char === "#" || char === limit) 	updatedColor += char;
-		else if(char.toLowerCase() === from) 		updatedColor += to;
+		else if(char === from) 		updatedColor += to;
 		else {
 			const code = color.charCodeAt(stringId);
 			const updatedChar = String.fromCharCode((isDarker) ? (code -1) : (code +1));
@@ -512,7 +512,7 @@ zenetysShapeGaugeSpeedometer.prototype.drawGauge = function (c,w,h, percentage, 
 		function getNeedleColor() {
 			if(style === "auto") return getGaugeColor(
 				needlePercentage, 
-				colors.map(getUpdatedColor), 
+				colors.map(color => updateColor(color)),
 				stages
 			);
 			else if(style === "custom") return customColor;
