@@ -20,7 +20,7 @@
  * 
  * See documentation for more details.
  */
-Draw.loadPlugin(
+ Draw.loadPlugin(
   function(ui) {
     const LIVE_USERNAME = "live.username";
     const LIVE_APIKEY = "live.apikey";
@@ -33,6 +33,7 @@ Draw.loadPlugin(
     const LIVE_DATA = "live.data";
     const LIVE_SOURCE = "live.source";
     const LIVE_REF = "live.id";
+    const LIVE_HANDLERS = "live.handlers";
 
     const live = {
       pageBaseId: undefined,
@@ -40,6 +41,10 @@ Draw.loadPlugin(
       timeout: 0,
       isInit: false,
       nodes: [],
+      handlers: {
+        list: {},
+        separators: { list: "---", pair: ":" }
+      },
       apitypes: [
         { id: "elastic", source: "hits.hits[0]._source" },
         { id: "hastat", post: hastatBuildObject },
@@ -103,6 +108,7 @@ Draw.loadPlugin(
         LIVE_DATA,      // Graph node API
         LIVE_SOURCE,    // path from received API response to get source object (autoset if LIVE_APITYPE is set)
         LIVE_REF,       // Reference associated with API stored in graph object LIVE_SOURCE
+        LIVE_HANDLERS,  // Array containing user defined methods stored in graph root node
       ],
       credentials: [LIVE_USERNAME, LIVE_PASSWORD, LIVE_APIKEY],
       unavailables: [
@@ -115,6 +121,7 @@ Draw.loadPlugin(
         LIVE_SOURCE,
         LIVE_APITYPE,
         LIVE_REF,
+        LIVE_HANDLERS,
       ]
     };
 
@@ -170,6 +177,7 @@ Draw.loadPlugin(
             addLiveUpdatePalette();
             addLiveTabToFormatPanel();
             overrideFormatPanelRefresh();
+            storeHandlers();
           }
 
           // Adds a listener to stop the ongoing update process if page changed
@@ -179,6 +187,7 @@ Draw.loadPlugin(
               if(live.pageBaseId !== currentPageBaseId) {
                 if(live.thread) log("Refresh feature stopped due to graph page change");
                 resetScheduleUpdate();
+                storeHandlers(true);
               }
             }
           });
@@ -327,27 +336,36 @@ Draw.loadPlugin(
 
       /**
        * Builds an input section in the Live format panel
-       * @param {string} text Displayed label
-       * @param {string} attrName Input's corresponding live attribute
-       * @param {string} targetId Targetted graph node id
+       * @param {"property"|"handler"} type Selects if inputs are for live properties or handlers
+       * @param {string} labelStr Text displayed in input field: attribute parsed name or handler name
+       * @param {string} attrName Input's corresponding live attribute name or handler value
+       * @param {string} targetId Targetted graph node id (empty if in handler type)
        * @returns {object} Set of all HTML elements for the input
        */
-      function buildInput(text, attrName, target) {
-        if(!target) return {cb: null, shortField: null, longField: null, label: null};
+      function buildInput(type, labelStr, attrName, target) {
+        if(type === "property" && !target) return {
+          cb: null, 
+          shortField: null, 
+          longField: null, 
+          label: null
+        };
+
         const targetId = target.getAttribute("id");
         const emptyValue = "";
         const base = mxUtils.findNode(graphXml, "id", live.pageBaseId);
-        const attrValue = target.getAttribute(attrName) || null;
+        const attrValue = (
+          type === "handler" ? attrName : target.getAttribute(attrName) || null
+        );
 
         const cb = document.createElement('input');
         cb.setAttribute('type', 'checkbox');
         cb.style.margin = '3px 3px 0px 0px';
         cb.checked = attrValue;
-        cb.title = (cb.checked ? "Remove" : "Add") + " attribute";
+        cb.title = (cb.checked ? "Remove " : "Add ") + type;
 
         const label = document.createElement("label");
         label.style.textOverflow = "ellipsis";
-        mxUtils.write(label, text);
+        mxUtils.write(label, labelStr);
 
         /**
          * Creates an input or textarea field depending on hrmlTag value
@@ -410,17 +428,11 @@ Draw.loadPlugin(
             else return emptyValue;
           }
 
-          if (attrName === LIVE_APITYPE) {
-            elt.placeholder = "raw";
-          }
-          else if(attrName === LIVE_SOURCE) {
-            elt.placeholder = getSourcePlaceholder(target, base);
-          }
-          else if(base.hasAttribute(attrName)) {
-            elt.placeholder = base.getAttribute(attrName);
-          }
+          if (attrName === LIVE_APITYPE)        elt.placeholder = "raw";
+          else if(attrName === LIVE_SOURCE)     elt.placeholder = getSourcePlaceholder(target, base);
+          else if(base.hasAttribute(attrName))  elt.placeholder = base.getAttribute(attrName);
           else elt.placeholder = emptyValue;
-            
+
           return elt;
         }
 
@@ -430,16 +442,18 @@ Draw.loadPlugin(
         // INPUTS EVENT HANDLERS \\
         function handleKeyDownOnTextInput(e) {
           if(e.key === "Enter" || e.key === "Escape") {
-            if(e.key === "Escape") {
-              longField.value = value;
-            }
+            if(e.key === "Escape") longField.value = attrValue;
             document.activeElement.blur();
           }
         }
         function handleFocusoutOfTextInput() {
-          const initialValue = target.getAttribute(attrName) || "";
+          let initialValue = undefined;
+          if(type === "property") initialValue = target.getAttribute(attrName) || "";
+          if(type === "handler") initialValue = live.handlers.list[labelStr] || "";
+          const propName = type === "handler" ? labelStr : attrName;
+
           if(initialValue !== longField.value) {
-            updateLiveAttrInFormatPanel(targetId, attrName, longField.value);
+            updateGraph(targetId, type, propName, longField.value);
           }
           longField.style.display = "none";
           shortField.style.display = "inline";
@@ -448,12 +462,12 @@ Draw.loadPlugin(
           e.preventDefault();
           const isChecked = !e.target.checked;
           if(isChecked) {
-            if(mxUtils.confirm("Are you sure to remove " + attrName + " ?")) {
-              updateLiveAttrInFormatPanel(targetId, attrName);
+            const propName = type === "handler" ? labelStr : attrName;
+            if(mxUtils.confirm("Are you sure to remove " + propName + " " + type + " ?")) {
+              updateGraph(targetId, type, propName);
             }
-          } else {
-            shortField.focus();
-          }
+          } 
+          else shortField.focus();
         }
         function handleFocusOnShortField(e) {
           e.preventDefault();
@@ -473,12 +487,13 @@ Draw.loadPlugin(
       /**
        * Builds inputs then appends its to the Live format panel container
        * @param {Array<object>} inputsList List of data for the input build
+       * @param {"classic"|"handler"} type Selects if inputs are for live attrs or handlers
        * @param {HTMLElement} container Inputs HTML container
        * @param {Node} targetId Targetted graph node
        */
-      function handleSubpanelInputs(container, target, inputsList) {
+      function handleSubpanelInputs(container, type, target, inputsList) {
         for(const input of inputsList) {
-          const [text, attributeName] = input;
+          const [displayedLabel, attributeName] = input;
 
           const inputSection = document.createElement('section');
           inputSection.style.padding = '6px 0px 1px 1px';
@@ -490,11 +505,12 @@ Draw.loadPlugin(
           inputSection.style.justifyContent = "flex-start";
           inputSection.style.alignItems = "center";
 
-          const {cb, shortField, longField, label} = buildInput(
-            text,
-            attributeName,
-            target
-          );
+          const {
+            cb, 
+            shortField, 
+            longField, 
+            label
+          } = buildInput(type, displayedLabel, attributeName, target);
 
           inputSection.append(cb, label, shortField, longField);
           container.appendChild(inputSection);
@@ -515,7 +531,7 @@ Draw.loadPlugin(
         titleContainer.style.width = "100%";
         subpanelContainer.appendChild(titleContainer);
 
-        if(title !== "Properties") {  
+        if(title !== "Properties" && title !== "Handlers") {  
           const baseInputs = [
             ["API", LIVE_API],
             ["API Type", LIVE_APITYPE],
@@ -533,33 +549,57 @@ Draw.loadPlugin(
             ["Style", LIVE_STYLE],
           ];
 
-          handleSubpanelInputs(subpanelContainer, target, baseInputs);
+          handleSubpanelInputs(subpanelContainer, "property", target, baseInputs);
           if(isSelectionMode) {
-            handleSubpanelInputs(subpanelContainer, target, graphNodeInputs);
+            handleSubpanelInputs(subpanelContainer, "property", target, graphNodeInputs);
           }
         } else {
-          const propertyInputs = [];
-          for(const attr of target.attributes) {
-            if(live.isLiveProperty(attr.name)) {
-              const newLiveProperty = [
-                live.property.getName(attr.name),
-                attr.name
-              ];
-              propertyInputs.push(newLiveProperty);
+          if(title === "Properties") {
+            const propertyInputs = [];
+            for(const attr of target.attributes) {
+              if(live.isLiveProperty(attr.name)) {
+                const newLiveProperty = [
+                  live.property.getName(attr.name),
+                  attr.name
+                ];
+                propertyInputs.push(newLiveProperty);
+              }
             }
+            handleSubpanelInputs(subpanelContainer, "property", target, propertyInputs);
+          } 
+          else if(title === "Handlers") {
+            //! ON EST LAAA
+            const handlerInputs = [];
+            Object.keys(live.handlers.list).forEach(handlerName => handlerInputs.push([
+              handlerName,
+              live.handlers.list[handlerName]
+            ]));
+            handleSubpanelInputs(subpanelContainer, "handler", target, handlerInputs);
+
           }
-          handleSubpanelInputs(subpanelContainer, target, propertyInputs);
         }
         return subpanelContainer;
       }
 
       /**
-       * Builds the "Add new property" form in the Live format panel 
+       * Builds a form in the Live format panel 
+       * @param {"property"|"handler"} type If form is for new property o new handler
        * @param {string} targetId Targetted graph object's id
        */
-      function buildNewPropertyForm(targetId) {
+      function buildFormatPanelForm(type, targetId) {
+        const getLabel = (property) => {
+          const Type = type[0].toUpperCase() + type.slice(1);
+          const labels = {
+            title: "Add Live " + Type,
+            validate: "Confirm",
+            placeholder: Type + " ",
+            error: "New " + type + " must have a "
+          }
+          return labels[property];
+        }
+
         const formContainer = new BaseFormatPanel().createPanel();
-        const title = new BaseFormatPanel().createTitle("Add Property");
+        const title = new BaseFormatPanel().createTitle(getLabel("title"));
         formContainer.appendChild(title);
         formContainer.style.padding = "12px";
         formContainer.style.textAlign = "center";
@@ -575,35 +615,27 @@ Draw.loadPlugin(
           input.style.borderRadius = "0px";
           input.style.border = "1px solid " + ui.format.inactiveTabBackgroundColor;
           input.style.marginBottom = "10px";
-          input.placeholder = "Property " + key;
+          input.placeholder = getLabel("placeholder") + key;
 
           formContainer.appendChild(input);
           inputs[key] = input;
         }
         const validateBtn = document.createElement("button");
-        mxUtils.write(validateBtn, "Add Live Property");
+        mxUtils.write(validateBtn, getLabel("validate"));
         validateBtn.style.width = "80%";
 
         function validateForm() {
           const nameFieldIsEmpty = (inputs.name.value === "");
           const valueFieldIsEmpty = (inputs.value.value === "");
-
+          const namme = (type === "property" ? live.property.prefix : "") + inputs.name.value.trim();
           if ((!nameFieldIsEmpty) && (!valueFieldIsEmpty)) {
-            updateLiveAttrInFormatPanel(
-              targetId, 
-              live.property.prefix + inputs.name.value.trim(),
-              inputs.value.value.trim()
-            );
+            updateGraph(targetId, type, namme, inputs.value.value.trim());
             inputs.name.value = "";
             inputs.value.value = "";
           }
           else {
-            if(nameFieldIsEmpty) {
-              log("New property must have a name !");
-            }
-            if(valueFieldIsEmpty) {
-              log("New property must have a value !");
-            }
+            if(nameFieldIsEmpty)  log(getLabel("error") + "name !");
+            if(valueFieldIsEmpty) log(getLabel("error") + "value !");
           }
         }
 
@@ -630,30 +662,61 @@ Draw.loadPlugin(
       if(isSelectionMode) {
         liveFormatPanelContainer.append(
           buildSubpanel("Properties", target),
-          buildNewPropertyForm(targetId)
+          buildFormatPanelForm("property", targetId)
+        );
+      } else {
+        liveFormatPanelContainer.append(
+          buildSubpanel("Handlers", target),
+          buildFormatPanelForm("handler", targetId)
         );
       }
+
       return liveFormatPanelContainer;
     }
 
     /**
-     * Updates a live attribute using Live custom format panel
+     * Updates the xml graph using format panel components.
+     * Updates nodes live properties or handlers depending on affected type
      * @param {string} targetId Targetted graph node id
-     * @param {string} attributeName Name of the attribute to update
-     * @param {string} attributeValue Computed update value for target's selected attribute
+     * @param {"property"|"handler"} type Defines kind of update
+     * @param {string} name Name of the attribute to update or of the handler
+     * @param {string} value Corresponding value
      */
-    function updateLiveAttrInFormatPanel(targetId, attributeName, attributeValue = null) {
+    function updateGraph(targetId, type, name, value = null) {
       const selectedCells = [...ui.editor.graph.selectionModel.cells];
       const graphXml = ui.editor.getGraphXml();
       const target = mxUtils.findNode(graphXml, "id", targetId);
-      const msg = {prop: "Property " + attributeName + " "};
+      const msg = {
+        prop: type === "property" ? "Property " + name + " " : "Handlers updated: "
+      };
 
-      if(attributeValue) {
-        target.setAttribute(attributeName, attributeValue);
-        msg.action = "added on ";
-      } else {
-        target.removeAttribute(attributeName);
-        msg.action = "removed from ";
+      if(type === "property") {
+        if(value) {
+          target.setAttribute(name, value);
+          msg.action = "added on ";
+        } else {
+          target.removeAttribute(name);
+          msg.action = "removed from ";
+        }
+      } 
+      else if(type === "handler") {
+        const handlers = storeHandlers();
+        msg.action = handlers[name] ? value ? " modified" : " deleted" : " added";
+
+        /** Updates targetted handler */
+        if(handlers[name]) {
+          if(value) handlers[name] = value;
+          else delete handlers[name];
+        } 
+        else handlers[name] = value;
+
+        /** Stores & stringifies handlers to get the node updated value */
+        storeHandlers(true, handlers);
+        const sep = live.handlers.separators;
+        const handlersAttributeValue = Object.keys(handlers).map(
+          (key) => `${key}${sep.pair}${handlers[key]}`
+        ).join(sep.list);
+        target.setAttribute(LIVE_HANDLERS, handlersAttributeValue);
       }
 
       ui.editor.setGraphXml(graphXml);
@@ -662,8 +725,37 @@ Draw.loadPlugin(
       if(targetId === live.pageBaseId) msg.obj = "graph base";
       else msg.obj = "object with id " + targetId;
 
-      log(msg.prop + msg.action + msg.obj);
+      if(type === "property") log(msg.prop + msg.action + msg.obj);
+      if(type === "handler") log(msg.prop + name + msg.action);
       resetScheduleUpdate();
+    }
+
+    function storeHandlers(rebuild = false, computed = false) {
+      if(!rebuild && Object.keys(live.handlers.list).length > 0) return live.handlers.list;
+
+      if(computed) {
+        live.handlers.list = computed;
+        getHandlersMethods();
+      } else {
+        const graphXml = ui.editor.getGraphXml();
+        const root = mxUtils.findNode(graphXml, "id", live.pageBaseId);
+        const handlersStr = root.getAttribute(LIVE_HANDLERS);
+        const sep = live.handlers.separators;
+        const handlers = {};
+  
+        if(handlersStr) {
+          /** Parses input string to work in handlers object */
+          handlersStr.split(sep.list).forEach(pair => {
+            const limit = pair.indexOf(sep.pair);
+            const key = pair.slice(0, limit);
+            const handler = pair.slice(limit + 1);
+            handlers[key] = handler;
+          });
+          live.handlers.list = handlers;
+          getHandlersMethods();
+        } else live.handlers.list = {};
+      }
+      return live.handlers.list;
     }
 
     /**
@@ -1010,6 +1102,70 @@ Draw.loadPlugin(
     }
 
     /**
+     * Parses a string stored in handlers to an available function.
+     * @param {string} handler String containing the function definition
+     * @returns {Function} Parsed function
+     */
+    function parseStringHandler(handler) {
+      function getArgs() {
+        return handler.slice(
+          handler.indexOf("(") + 1,
+          handler.indexOf(")"),
+        ).split(",").map(arg => arg.trim());
+      }
+      handler.trim();
+      const isArrowFunctionWithOneArg = (
+        !handler.startsWith("function") && !handler.startsWith("(")
+      );
+      const isNotArrowFunction = handler.startsWith("function");
+
+      const args = isArrowFunctionWithOneArg ? [
+        handler.slice(0, handler.indexOf("=>")).trim()
+      ] : getArgs();
+
+      const instructions = isNotArrowFunction ? handler.slice(
+        handler.indexOf("{")
+      ) : handler.slice(handler.indexOf("=>") + 2).trim();
+
+      try {
+        return new Function(
+          ...args,
+          `${instructions.startsWith("{") ? "" : "return "}${instructions}`
+        );
+      } catch(e) {
+        throw Error(
+          "Given string cannot be parsed to an available function. " + 
+          "You should make sure that it is properly written."
+        )
+      }
+    }
+
+    /**
+     * Parses handlers methods from given string inputs.
+     * Creates an object containing associated JS methods for every 
+     * stored handler key which is returned & stored in `live.handlers.parsed`.
+     * @returns {{handlerName: Function}} Parsed handlers
+     */
+    function getHandlersMethods() {
+      const handlers = {};
+      Object.keys(live.handlers.list).forEach(
+        key => {
+          try {
+            handlers[key] = parseStringHandler(live.handlers.list[key])
+          } catch(e) {
+            warnUser(
+              "helpers",
+              key,
+              "Error attempting to parse method for " + key + "helper: " + e.message
+            );
+          }
+        }
+      );
+      live.handlers.parsed = handlers;
+      return handlers;
+    }
+
+    /**
      * Computes attribute updated value using fechted named APIs
      * responses & instructions set in live attribute value
      * @param {[{response, ref}]} apiResponses List of named APIs
@@ -1019,10 +1175,14 @@ Draw.loadPlugin(
      */
     function updateLiveAttribute(apiResponses, nodeApiRef, instructions) {
       const selfApiResponse = apiResponses[nodeApiRef];
-      const updatedValue = new Function("data", "self", instructions.slice(1))(
-        apiResponses, 
-        selfApiResponse,
-      );
+      const handlerKeys = Object.keys(live.handlers.parsed);
+      const handlerMethods = handlerKeys.map(name => live.handlers.parsed[name]);
+      const updatedValue = new Function(
+        "data", 
+        "self", 
+        ...handlerKeys, 
+        instructions.slice(1)
+      )(apiResponses, selfApiResponse, ...handlerMethods);
 
       if(!updatedValue) throw Error("Instructions set didn't return anything");
       else return updatedValue;
