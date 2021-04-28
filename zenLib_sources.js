@@ -804,6 +804,46 @@ zenetysShapeWidgetWeather.prototype.cst = {
 		critical: "#CCC",
 		down: "#B3B3B3",
 		unknown: "#EDEDED",
+	},
+	THUNDERBOLT_COORDS: [
+		[.52, .08],
+		[.28, .36],
+		[.41, .52],
+		[.28, .62],
+		[.42, .74],
+		[.24, .91],
+		[.60, .74],
+		[.49, .65],
+		[.67, .55],
+		[.55, .43],
+		[.75, .31],
+	],
+	WATERDROPS_COORDS: {
+		back: [
+			[ 0, .4],
+			[ .1, .6],
+			[ .6, .7],
+			[ .9, .45],
+		],
+		front: [
+			[.025, .75],
+			[.125, .875],
+			[.225, .7],
+			[.3, .8],
+			[.5, .875],
+			[.7, .8],
+			[.79, .7],
+			[.925, .875],
+			
+			[.1, .4],
+			[.2, .45],
+			[.4, .7],
+			[.525, .65],
+			[.6, .5],
+			[.375, .45],
+			[.74, .55],
+			[.95, .65],
+		]
 	}
 };
 
@@ -938,10 +978,66 @@ zenetysShapeWidgetWeather.prototype.foreground = function(c, w, h) {
 		drawPicto("#fff");
 	}
 
+	function drawWeather(status, layout, coordinates) {
+		const thunderboltsPositions = {
+			back: [
+			[0, .5],
+			[.5, .54],
+		],
+			front: [
+				[.0, .0],
+				[.225, .4],
+				[.5, .1],
+			]
+		};
+
+		if(status === "critical") {
+			c.begin();
+			c.setFillColor("#66B2FF");
+			coordinates[layout].forEach(
+				([posX, posY]) => {
+					c.ellipse(w*posX, h*posY, w*.05, h*.125);
+					c.fill();
+				}
+			)
+			c.close();
+		}
+
+		else if(status === "down") {
+			thunderboltsPositions[layout].forEach(([originX, originY]) => {
+				c.begin();
+				c.setFillColor("#FF0");
+				coordinates.map(([posX, posY]) => {
+					const normalized = [];
+					normalized.push(w * ((posX * .5) + originX));
+					normalized.push(h * ((posY * .5) + originY));
+					return normalized;
+				}).forEach(([posX, posY], index) => (
+					index === 0 ? c.moveTo(posX, posY):c.lineTo(posX, posY))
+				);
+				c.fill();
+				c.close();
+			});
+		}
+	}
+
 	if(status === "ok") drawSun(this.cst.SUN_COLOR, this.cst.BEAMS);
 	else {
+		const isNotUnknown = (status !== "unknown");
+		const coordinates = (status === "critical")
+		? this.cst.WATERDROPS_COORDS 
+		: this.cst.THUNDERBOLT_COORDS;
+		
+		if(isNotUnknown) drawWeather(status, "back", coordinates);
+		else {
+			c.begin();
+			c.setFillColor("#FFEAB8");
+			c.ellipse(w*.4, h*.4, w*.6, h*.6);
+			c.fill();
+			c.close();
+		}
 		drawCloud(this.cst.CLOUD_COLORS[status], this.cst.CLOUD_COORDS);
-		drawStatus(status);
+		if(isNotUnknown) drawWeather(status, "front", coordinates);
 	}
 };
 
