@@ -225,7 +225,7 @@
     function addLiveTabToFormatPanel() {
       const formatContainer = document.querySelector(".geFormatContainer");
       const formatTabs = formatContainer.firstChild;
-      if(!formatTabs) return;
+      if(!formatTabs) return setTimeout(addLiveTabToFormatPanel, 500);
       const formatWidth = parseInt(formatContainer.style.width);
       const formatTabsMax = ui.editor.graph.isSelectionEmpty() ? 3 : 4;
       const formatTabsNb = formatTabs.childNodes.length;
@@ -246,7 +246,7 @@
          */
         function setTabStyle(elt, isActiveTab = false) {
           if(isActiveTab) elt.style.backgroundColor = "inherit";
-          else elt.style.backgroundColor = ui.format.inactiveTabBackgroundColor;
+          else elt.style.backgroundColor = "#f1f3f4";// ui.format.inactiveTabBackgroundColor;
 
           elt.style.borderWidth = "0px";
           elt.style.borderLeftWidth = "1px";
@@ -314,8 +314,8 @@
 
     /** Overrides format panel reshresh event to add Live tab */
     function overrideFormatPanelRefresh() {
-      const formatRefreshBasicFunc = ui.format.refresh;
-      ui.format.refresh = function() {
+      const formatRefreshBasicFunc = ui.format.immediateRefresh;
+      ui.format.immediateRefresh = function() {
         mxUtils.bind(ui.format, formatRefreshBasicFunc)();
         if(!ui.editor.graph.isEditing()) addLiveTabToFormatPanel();
       }
@@ -378,7 +378,7 @@
           elt.style.boxSizing = "border-box";
           elt.style.margin = "0";
           elt.style.padding = "0";
-          elt.style.border = "1px solid " + ui.format.inactiveTabBackgroundColor;
+          elt.style.border = "1px solid #f1f3f4";// + ui.format.inactiveTabBackgroundColor;
           elt.style.borderRadius = "0px";
           elt.style.fontStyle = (attrValue) ? "normal" : "italic";
           elt.style.backgroundColor = "white";
@@ -544,7 +544,7 @@
           const graphNodeInputs = [ 
             // Displayed only if a node is selected in the graph
             ["Object", LIVE_DATA],
-            ["Reference", LIVE_REF],
+            ["API ID", LIVE_REF],
             ["Text", LIVE_TEXT],
             ["Style", LIVE_STYLE],
           ];
@@ -613,7 +613,7 @@
           input.style.height = "30px";
           input.style.boxSizing = "border-box";
           input.style.borderRadius = "0px";
-          input.style.border = "1px solid " + ui.format.inactiveTabBackgroundColor;
+          input.style.border = "1px solid #f1f3f4";// + ui.format.inactiveTabBackgroundColor;
           input.style.marginBottom = "10px";
           input.placeholder = getLabel("placeholder") + key;
 
