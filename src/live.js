@@ -43,6 +43,7 @@
       nodes: [],
       handlers: {
         list: {},
+        parsed: {},
         separators: { list: "---", pair: ":" }
       },
       apitypes: [
@@ -1280,7 +1281,7 @@
                 }
               }
               else {
-                const nodeRef = liveNode.elt.getAttribute(LIVE_REF);
+                const nodeRef = liveNode.elt.getAttribute(LIVE_REF) || liveNode.id;
                 updatedValue = updateLiveAttribute(apiResponses, nodeRef, attrValue);
               }
               fillUpdateNode(updateNode, attrName, updatedValue, style);
