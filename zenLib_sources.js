@@ -7,12 +7,13 @@ function getEnumList(enumType) {
 	const enums = {
 		linear: ["Horizontal", "Vertical"],
 		needleStyles: ["Auto", "Bright", "Dark", "Custom"],
-		status: ["Ok", "Warning", "Critical", "Down", "Unknown"],
 		speedometer: [
 			["circle", "Circle"],
 			["half", "Half circle"],
 			["needle", "With needle"],
-		]
+		],
+		status: ["Ok", "Warning", "Critical", "Down", "Unknown"],
+		weather: ["Sun", "Cloudy", "Rain", "Lightning", "Night"],
 	};
 
 	if(enumType === "speedometer") return enums[enumType].map(
@@ -800,10 +801,10 @@ zenetysShapeWidgetWeather.prototype.cst = {
 		[.10, .35, .3, .35],
 	],
 	CLOUD_COLORS: {
-		warning: "#DEDEDE",
-		critical: "#CCC",
-		down: "#B3B3B3",
-		unknown: "#EDEDED",
+		cloudy: "#DEDEDE",
+		rain: "#CCC",
+		lightning: "#B3B3B3",
+		night: "#EDEDED",
 	},
 	THUNDERBOLT_COORDS: [
 		[.52, .08],
@@ -848,15 +849,15 @@ zenetysShapeWidgetWeather.prototype.cst = {
 };
 
 zenetysShapeWidgetWeather.prototype.defaultValues = {
-	status: "ok"
+	status: "sun"
 };
 
 zenetysShapeWidgetWeather.prototype.customProperties = [{
 	name: "status", 
 	dispName: "Status", 
 	type: "enum", 
-	defVal: "ok", 
-	enumList: getEnumList("status"),
+	defVal: "sun", 
+	enumList: getEnumList("weather"),
 }];
 
 zenetysShapeWidgetWeather.prototype.paintVertexShape = function(c, x, y, w, h) {
@@ -905,79 +906,6 @@ zenetysShapeWidgetWeather.prototype.foreground = function(c, w, h) {
 
 	}
 
-	function drawStatus(status) {
-		function drawArea(color) {
-			c.begin();
-			c.setFillColor(color);
-			c.ellipse(w*.5, h*.5, w*.5, h*.5);
-			c.fill();
-			c.close();
-		}
-
-		function drawPicto(color) {
-			function normalizeValues(x, y, wx = null, hy = null) {
-				const normalized = [];
-				normalized.push(w * ((x * .005) + .5));
-				normalized.push(h * ((y * .005) + .5));
-				if(wx) normalized.push(w * ((wx * .005)));
-				if(hy) normalized.push(h * ((hy * .005)));
-				return normalized;
-			}
-
-			c.begin();
-			c.setFillColor(color);
-
-			switch(status) {
-				case "warning": {
-					const dots = [[50,10], [20,50], [50, 90],[80, 50]];
-					for(let dot = 0; dot < dots.length; dot++) {
-						const [posx, posy] = normalizeValues(...dots[dot]);
-						(dot === 0) ? c.moveTo(posx, posy) : c.lineTo(posx, posy);
-					}
-					break;
-				};
-				case "critical": {
-					const dots = [
-						[52, 08],
-						[28, 36],
-						[41, 52],
-						[28, 62],
-						[42, 74],
-						[24, 91],
-						[60, 74],
-						[49, 65],
-						[67, 55],
-						[55, 43],
-						[75, 31],
-					];
-					for(let dot = 0; dot < dots.length; dot++) {
-						const [posx, posy] = normalizeValues(...dots[dot]);
-						(dot === 0) ? c.moveTo(posx, posy) : c.lineTo(posx, posy);
-					}
-					break;
-				}
-				case "down": {
-					const BASE_COORDS = [6, 40, 88, 20];
-					const [posx, posy, rwidth, rheight] = normalizeValues(...BASE_COORDS);
-					c.rect(posx, posy, rwidth, rheight);
-					break;
-				}
-				case "unknown": {
-					c.setFontSize(w*.45);
-					c.setFontColor("#fff");
-					addText(c, w*.75, h*.66, "---", {isPercentage: false});
-					break;
-				};
-				default: break;
-				;
-			}
-			c.fill();
-			c.close();
-		}
-		drawArea(getStatusColor(status));
-		drawPicto("#fff");
-	}
-
 	function drawWeather(status, layout, coordinates) {
 		const thunderboltsPositions = {
 			back: [
@@ -991,7 +919,7 @@ zenetysShapeWidgetWeather.prototype.foreground = function(c, w, h) {
 			]
 		};
 
-		if(status === "critical") {
+		if(status === "rain") {
 			c.begin();
 			c.setFillColor("#66B2FF");
 			coordinates[layout].forEach(
@@ -1003,10 +931,11 @@ zenetysShapeWidgetWeather.prototype.foreground = function(c, w, h) {
 			c.close();
 		}
 
-		else if(status === "down") {
+		else if(status === "lightning") {
 			thunderboltsPositions[layout].forEach(([originX, originY]) => {
 				c.begin();
 				c.setFillColor("#FF0");
+
 				coordinates.map(([posX, posY]) => {
 					const normalized = [];
 					normalized.push(w * ((posX * .5) + originX));
@@ -1021,14 +950,14 @@ zenetysShapeWidgetWeather.prototype.foreground = function(c, w, h) {
 		}
 	}
 
-	if(status === "ok") drawSun(this.cst.SUN_COLOR, this.cst.BEAMS);
+	if(status === "sun") drawSun(this.cst.SUN_COLOR, this.cst.BEAMS);
 	else {
-		const isNotUnknown = (status !== "unknown");
-		const coordinates = (status === "critical")
+		const isNotNight = (status !== "night");
+		const coordinates = (status === "rain")
 		? this.cst.WATERDROPS_COORDS 
 		: this.cst.THUNDERBOLT_COORDS;
 		
-		if(isNotUnknown) drawWeather(status, "back", coordinates);
+		if(isNotNight) drawWeather(status, "back", coordinates);
 		else {
 			c.begin();
 			c.setFillColor("#FFEAB8");
@@ -1037,7 +966,7 @@ zenetysShapeWidgetWeather.prototype.foreground = function(c, w, h) {
 			c.close();
 		}
 		drawCloud(this.cst.CLOUD_COLORS[status], this.cst.CLOUD_COORDS);
-		if(isNotUnknown) drawWeather(status, "front", coordinates);
+		if(isNotNight) drawWeather(status, "front", coordinates);
 	}
 };
 
