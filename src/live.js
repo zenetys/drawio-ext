@@ -50,6 +50,7 @@
         { id: "elastic", source: "hits.hits[0]._source" },
         { id: "hastat", post: hastatBuildObject },
       ],
+      warnings: {},
       property: {
         prefix: "live.property.",
         getName: (fullPropName) => fullPropName.slice(live.property.prefix.length)
@@ -343,7 +344,7 @@
        * @param {string} targetId Targetted graph node id (empty if in handler type)
        * @returns {object} Set of all HTML elements for the input
        */
-      function buildInput(type, labelStr, attrName, target) {
+      function buildInput(type, labelStr, attrName, target, withWarning) {
         if(type === "property" && !target) return {
           cb: null, 
           shortField: null, 
@@ -366,7 +367,7 @@
 
         const label = document.createElement("label");
         label.style.textOverflow = "ellipsis";
-        mxUtils.write(label, labelStr);
+        mxUtils.write(label, labelStr + (withWarning ? " ⚠":""));
 
         /**
          * Creates an input or textarea field depending on hrmlTag value
@@ -506,12 +507,15 @@
           inputSection.style.justifyContent = "flex-start";
           inputSection.style.alignItems = "center";
 
+          const warning = getWarning(attributeName, target.getAttribute("id"));
+          if(warning) inputSection.title = warning;
+
           const {
             cb, 
             shortField, 
             longField, 
             label
-          } = buildInput(type, displayedLabel, attributeName, target);
+          } = buildInput(type, displayedLabel, attributeName, target, Boolean(warning));
 
           inputSection.append(cb, label, shortField, longField);
           container.appendChild(inputSection);
@@ -867,7 +871,7 @@
         else request = null;
       }
 
-      if(request === null) throw Error("url pattern is wrong", url);
+      if(request === null) throw Error("url pattern is wrong: ", url);
       return request;
     }
 
@@ -887,11 +891,6 @@
           if(live.isLiveAttribute(attribute.name)) {
             isLiveElement = true;
             break;
-          } else if(attribute.name.startsWith(live.prefix)) {
-            warnUser(elementId, undefined, 
-              "Attribute " + attribute.name + " starts like a live attribute " + 
-              "but isn't. You should be careful when naming your custom attributes"
-            );
           }
         }
 
@@ -939,12 +938,10 @@
 
         const targettedApi = live.apitypes.find(api => api.id === apitype);
         if(!targettedApi) {
-          log(
-            "Value set in apitype (" 
-            + apitype 
-            + ") in object with id " 
-            + currentNode.getAttribute("id")
-            +" does not match any identified apitype"
+          setWarning(
+            LIVE_APITYPE, 
+            target.getAttribute("id"),
+            "Value set does not match any identified apitype"
           );
           return false;
         }
@@ -1047,7 +1044,7 @@
               if(xhr.status >= 200 && xhr.status < 300) {
                 response = xhr.responseText.trim();
               } else {
-                throw Error("Request failed");
+                throw Error("Request failed with status " + xhr.status);
               }
             }
           }
@@ -1196,6 +1193,7 @@
     /** Performs an update process */
     function doUpdate() {
       clearThread(live.thread);
+      clearWarnings();
       const graphXml = ui.editor.getGraphXml();
       const baseNode = mxUtils.findNode(graphXml, "id", live.pageBaseId);
       if(!live.isInit) {
@@ -1223,12 +1221,13 @@
           if(!apiData) {
             if(!apiRef) return;
             else throw Error("There is no data to reference");
-          } 
+          }
           else if(!apiRef) throw Error(
-            "No reference for data: API will not be accessible from another element"
+            "No reference for data: API will not be accessible from another graph element"
           );
         } catch(e) {
-          warnUser(id, (!apiData) ? LIVE_DATA : LIVE_REF, e.message);
+          const targettedAttribute = (!apiData) ? LIVE_DATA : LIVE_REF;
+          setWarning(targettedAttribute, id, e.message);
           if(!apiData) return;
         }
 
@@ -1242,7 +1241,7 @@
   
           namedApis.push({response: parsedResponse, ref: apiRef || id});
         } catch(e) {
-          warnUser(id, (!apiData) ? LIVE_DATA : LIVE_REF, e.message);
+          setWarning(LIVE_DATA, id, e.message);
         }
       });
 
@@ -1286,11 +1285,8 @@
               }
               fillUpdateNode(updateNode, attrName, updatedValue, style);
             } catch(e) {
-              log(
-                "Graph object id:", liveNode.id,
-                "| Attribute:", attrName,
-                "\n", e.message
-              );
+              setWarning(attrName, liveNode.id, e.message);
+
             }
           }
         };
@@ -1309,6 +1305,50 @@
         }
       });
       live.thread = setTimeout(doUpdate, live.timeout);
+    }
+
+    /**
+     * Stores a warning for a graph element live attribute in live.warnings
+     * @param {string} attribute Targetted live attribute
+     * @param {string} objectId Targetted graph object id
+     * @param {string} message Warning message to store
+     */
+    function setWarning(attribute, objectId, message = undefined) {
+      if(message === undefined) {
+        if(live.warnings[attribute]) {
+          if(live.warnings[attribute][objectId]) {
+            delete live.warnings[attribute][objectId];
+          }
+        }
+      }
+      else {
+        if(!live.warnings[attribute]) {
+          live.warnings[attribute] = {};
+        }
+        if(!live.warnings[attribute][objectId]) {
+          live.warnings[attribute][objectId] = [];
+        }
+        if(!live.warnings[attribute][objectId].some(
+          warn => warn === message
+        )) live.warnings[attribute][objectId].push(message);
+      }
+    }
+
+    /**
+     * Searches in live.warnings if the live attribute of a graph object has a saved warning
+     * @param {string} attribute Targetted live attribute
+     * @param {string} objectId Targetted graph object id
+     * @returns {string} object attribute's corresponding id or an empty string
+     */
+    function getWarning(attribute, objectId) {
+      if(live.warnings[attribute]) {
+        return live.warnings[attribute][objectId] || "";
+      }
+      else return "";
+    }
+
+    function clearWarnings() {
+      live.warnings = {};
     }
 
     function log(...text) {
