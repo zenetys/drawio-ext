@@ -365,6 +365,15 @@
         cb.checked = attrValue;
         cb.title = (cb.checked ? "Remove " : "Add ") + type;
 
+        const customCb = document.createElement("span");
+        customCb.style.width = "10px";
+        customCb.style.height = "10px";
+        customCb.style.margin = "0px";
+        customCb.style.marginRight = "2px";
+        customCb.style.padding = "0px";
+        customCb.style.border = "1px solid " + (withWarning ? "#FA0" : "#aaa");
+        if(cb.checked) customCb.style.backgroundColor = withWarning ? "#FC0" : "#ccc";
+
         const label = document.createElement("label");
         label.style.textOverflow = "ellipsis";
         mxUtils.write(label, labelStr + (withWarning ? " ⚠":""));
@@ -385,7 +394,8 @@
           elt.style.fontStyle = (attrValue) ? "normal" : "italic";
           elt.style.backgroundColor = "white";
           if(htmlTag === "input") {
-            elt.style.width = live.isLiveProperty(attrName) ? "55%" : "60%";
+            // elt.style.width = live.isLiveProperty(attrName) ? "55%" : "60%";
+            elt.style.width = "50%";
             elt.type = "text";
             elt.style.height = "20px";
             elt.style.float = "right";
@@ -477,13 +487,27 @@
           longField.style.display = "block";
           longField.focus();
         }
+        function handleClickOnLabel(e) {
+          e.preventDefault();
+          const isChecked = cb.checked;
+          if(isChecked) {
+              const propName = type === "handler" ? labelStr : attrName;
+              if(mxUtils.confirm("Are you sure to remove " + propName + " " + type + " ?")) {
+                  cb.checked = !cb.checked;
+                  updateGraph(targetId, type, propName);
+              }
+          } 
+          else shortField.focus();
+        }
 
         mxEvent.addListener(cb, "click", handleClickOnCheckbox);
+        mxEvent.addListener(customCb, "click", handleClickOnLabel);
+        mxEvent.addListener(label, "click", handleClickOnLabel);    
         mxEvent.addListener(shortField, "focus", handleFocusOnShortField);
         mxEvent.addListener(longField, "keydown", handleKeyDownOnTextInput);
         mxEvent.addListener(longField, "focusout", handleFocusoutOfTextInput);
 
-        return { cb, label, longField, shortField };
+        return { cb: customCb, label, longField, shortField };
       }
 
       /**
@@ -510,12 +534,13 @@
           const warning = getWarning(attributeName, target.getAttribute("id"));
           if(warning) inputSection.title = warning;
 
-          const {
-            cb, 
-            shortField, 
-            longField, 
-            label
-          } = buildInput(type, displayedLabel, attributeName, target, Boolean(warning));
+          const { cb, shortField, longField, label } = buildInput(
+            type, 
+            displayedLabel, 
+            attributeName, 
+            target, 
+            Boolean(warning)
+          );
 
           inputSection.append(cb, label, shortField, longField);
           container.appendChild(inputSection);
