@@ -950,8 +950,8 @@ zenetysShapeWidgetWeather.prototype.foreground = function(c, w, h) {
 		}
 	}
 
-	if(status === "sun") drawSun(this.cst.SUN_COLOR, this.cst.BEAMS);
-	else {
+	if(status === "sun" || status === "cloudy") drawSun(this.cst.SUN_COLOR, this.cst.BEAMS);
+	if(status !== "sun") {
 		const isNotNight = (status !== "night");
 		const coordinates = (status === "rain")
 		? this.cst.WATERDROPS_COORDS 
