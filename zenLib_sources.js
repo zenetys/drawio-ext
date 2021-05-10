@@ -1030,7 +1030,7 @@ zenetysShapeBicoloreLine.prototype.paintEdgeShape = function(c, pts) {
 	};
 
 	/** Draws widget's half line in corresponding color */
-	function drawLine(color, fromStart, arrowType) {
+	function drawLine(color, fromStart) {
 		/** Computes a dot position in the line */
 		function getDotOnLine(pos, notFromStart = false, dot) {
 			if(notFromStart) return {
@@ -1047,7 +1047,9 @@ zenetysShapeBicoloreLine.prototype.paintEdgeShape = function(c, pts) {
 			}
 		};
 
-		const offset = arrowType < 4 ? .1 : .05;
+		/** offset: Stops line before boundaries if arrow is set to keep safe behaviour */
+		const offset = .045;
+
 		c.begin();
 		c.setStrokeColor(color);
 		if(fromStart) {
@@ -1127,8 +1129,8 @@ zenetysShapeBicoloreLine.prototype.paintEdgeShape = function(c, pts) {
 		c.close();
 	}
 
-	drawLine(startColor, true, arrowType);
-	drawLine(endColor, false, arrowType);
+	drawLine(startColor, true);
+	drawLine(endColor, false);
 
 	if(extArrows) {
 		drawArrow(startColor, start, false, arrowType);
