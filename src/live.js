@@ -227,7 +227,8 @@
     function addLiveTabToFormatPanel() {
       const formatContainer = document.querySelector(".geFormatContainer");
       const formatTabs = formatContainer.firstChild;
-      if(!formatTabs) return setTimeout(addLiveTabToFormatPanel, 500);
+      if(!formatTabs) return;
+
       const formatWidth = parseInt(formatContainer.style.width);
       const formatTabsMax = ui.editor.graph.isSelectionEmpty() ? 3 : 4;
       const formatTabsNb = formatTabs.childNodes.length;
