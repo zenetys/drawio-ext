@@ -531,7 +531,10 @@
           inputSection.style.justifyContent = "flex-start";
           inputSection.style.alignItems = "center";
 
-          const warning = getWarning(attributeName, target.getAttribute("id"));
+          const warning = getWarning(
+            type === "handler" ? "handler" : attributeName, 
+            type === "handler" ? displayedLabel : target.getAttribute("id")
+          );
           if(warning) inputSection.title = warning;
 
           const { cb, shortField, longField, label } = buildInput(
@@ -1174,13 +1177,10 @@
       Object.keys(live.handlers.list).forEach(
         key => {
           try {
-            handlers[key] = parseStringHandler(live.handlers.list[key])
+            handlers[key] = parseStringHandler(live.handlers.list[key]);
+            setWarning("handler", key);
           } catch(e) {
-            warnUser(
-              "helpers",
-              key,
-              "Error attempting to parse method for " + key + "helper: " + e.message
-            );
+            setWarning("handler", key, e.message);
           }
         }
       );
@@ -1209,10 +1209,6 @@
 
       if(!updatedValue) throw Error("Instructions set didn't return anything");
       else return updatedValue;
-    }
-
-    function warnUser(nodeId, attributeName, message) {
-      console.log(nodeId, attributeName, message);
     }
 
     /** Performs an update process */
@@ -1334,8 +1330,8 @@
 
     /**
      * Stores a warning for a graph element live attribute in live.warnings
-     * @param {string} attribute Targetted live attribute
-     * @param {string} objectId Targetted graph object id
+     * @param {string} attribute Targetted live attribute | "handler"
+     * @param {string} objectId Targetted graph object id | handler name
      * @param {string} message Warning message to store
      */
     function setWarning(attribute, objectId, message = undefined) {
@@ -1361,19 +1357,22 @@
 
     /**
      * Searches in live.warnings if the live attribute of a graph object has a saved warning
-     * @param {string} attribute Targetted live attribute
-     * @param {string} objectId Targetted graph object id
+     * In handlers case, objectId === handler name
+     * @param {string} attribute Targetted live attribute | "handler"
+     * @param {string|} objectId Targetted graph object id | handler name
      * @returns {string} object attribute's corresponding id or an empty string
      */
     function getWarning(attribute, objectId) {
-      if(live.warnings[attribute]) {
-        return live.warnings[attribute][objectId] || "";
-      }
-      else return "";
+      if(!live.warnings[attribute]) return "";
+      else return live.warnings[attribute][objectId]?.join("\n") || "";
     }
 
     function clearWarnings() {
-      live.warnings = {};
+      if(live.warnings.handler) {
+        const handler = {...live.warnings.handler};
+        live.warnings = { handler };
+      }
+      else live.warnings = {};
     }
 
     function log(...text) {
