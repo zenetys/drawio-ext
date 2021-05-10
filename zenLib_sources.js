@@ -950,8 +950,8 @@ zenetysShapeWidgetWeather.prototype.foreground = function(c, w, h) {
 		}
 	}
 
-	if(status === "sun") drawSun(this.cst.SUN_COLOR, this.cst.BEAMS);
-	else {
+	if(status === "sun" || status === "cloudy") drawSun(this.cst.SUN_COLOR, this.cst.BEAMS);
+	if(status !== "sun") {
 		const isNotNight = (status !== "night");
 		const coordinates = (status === "rain")
 		? this.cst.WATERDROPS_COORDS 
@@ -979,8 +979,12 @@ mxCellRenderer.registerShape(
 // * Bicolore Line
 // *********************************************************************************|
 
-function zenetysShapeBicoloreLine() {
+function zenetysShapeBicoloreLine(points, fill, stroke, strokewidth) {
 	mxArrowConnector.call(this);
+	this.points = points;
+	this.fill = fill;
+	this.stroke = stroke;
+	this.strokewidth = Math.min(strokewidth, 8);
 }
 mxUtils.extend(zenetysShapeBicoloreLine, mxArrowConnector);
 
@@ -988,47 +992,152 @@ zenetysShapeBicoloreLine.prototype.cst = {
 	SHAPE: "zenShape.bicoloreLine",
 	START_COLOR: "startColor",
 	END_COLOR: "endColor",
+	INT_ARROWS: "intArrows",
+	EXT_ARROWS: "extArrows",
+	ARROW_Type: "arrowType"
 };
 
-function addArrowProperty(name, type = "color") {
-	return addCustomProperty(name, type, zenetysShapeBicoloreLine);
+function addArrowProperty(name, type = "color", min = undefined, max = undefined) {
+	return addCustomProperty(name, type, zenetysShapeBicoloreLine, min, max);
 }
 
 zenetysShapeBicoloreLine.prototype.defaultValues = {
 	startColor: "#0F6E84",
 	endColor: "#17B8CE",
+	intArrows: true,
+	extArrows: false,
+	arrowType: 1,
 };
 
 zenetysShapeBicoloreLine.prototype.customProperties = [
 	addArrowProperty("startColor"),
 	addArrowProperty("endColor"),
+	addArrowProperty("intArrows", "bool"),
+	addArrowProperty("extArrows", "bool"),
+	addArrowProperty("arrowType", "int", 1, 6),
 ];
 
 zenetysShapeBicoloreLine.prototype.paintEdgeShape = function(c, pts) {
 	const startColor = getVariableValue(this, "startColor");
 	const endColor = getVariableValue(this, "endColor");
-
-	const [start, end] = pts;
+	const intArrows = Boolean(getVariableValue(this, "intArrows"));
+	const extArrows = Boolean(getVariableValue(this, "extArrows"));
+	const arrowType = getVariableValue(this, "arrowType");
+	const [start, end] = pts[0].x <= pts[1].x ? pts : pts.reverse();
 	const middle = {
 		x: (start.x + end.x) * .5,
 		y: (start.y + end.y) * .5,
 	};
-	
-	// draws line's first half
-	c.begin();
-	c.setStrokeColor(startColor);
-	c.moveTo(start.x, start.y);
-	c.lineTo(middle.x, middle.y);
-	c.stroke();	
-	c.close();
 
-	// draws line's second half
-	c.begin();
-	c.moveTo(middle.x, middle.y);
-	c.setStrokeColor(endColor);
-	c.lineTo(end.x, end.y);
-	c.stroke();
-	c.close();
+	/** Draws widget's half line in corresponding color */
+	function drawLine(color, fromStart, arrowType) {
+		/** Computes a dot position in the line */
+		function getDotOnLine(pos, notFromStart = false, dot) {
+			if(notFromStart) return {
+				x: dot.x + ((end.x - start.x) * pos),
+				y: dot.y + ((end.y - start.y) * pos)
+			};
+			switch(pos) {
+				case 0: return [start.x, start.y];
+				case 1: return [end.x, end.y];
+				default: return [
+					start.x + ((end.x - start.x) * pos),
+					start.y + ((end.y - start.y) * pos)
+				];
+			}
+		};
+
+		const offset = arrowType < 4 ? .1 : .05;
+		c.begin();
+		c.setStrokeColor(color);
+		if(fromStart) {
+			c.moveTo(...getDotOnLine(extArrows ? offset : 0));
+			c.lineTo(...getDotOnLine(intArrows ? .5 - offset : .5));
+		} else {
+			c.moveTo(...getDotOnLine(intArrows ? .5 + offset : .5));
+			c.lineTo(...getDotOnLine(extArrows ? 1 - offset : 1));
+		}
+		c.stroke();	
+		c.close();
+	}
+
+	/** Draws an arrow depending on dot position & arrow type in corresponding color */
+	function drawArrow(color, dot, isReversedArrow, arrowType) {
+		/** Computes dot polar coordinates */
+		function getPolarCoords(start, end, position = .1) {
+			/** Computes polar angle θ */
+			const height = Math.abs(end.y - start.y);
+			const hypoth = Math.sqrt(
+				Math.pow((end.x - start.x), 2) +
+				Math.pow((end.y - start.y), 2)
+			);
+			const azimut = Math.asin(height / hypoth);
+			
+			/** Computes polar radius r */
+			const offset = position;
+			const radius = Math.sqrt(
+				Math.pow(end.x - start.x, 2) + 
+				Math.pow(end.y - start.y, 2)
+			) * offset;
+
+			return { radius, azimut };
+		}
+		const {radius, azimut} = getPolarCoords(start, end);
+		
+		//* 9: To perform subtraction & fetch a Math.PI / n with 3 <= n <= 8
+		const pt1 = {
+			x: radius*Math.cos(Math.PI/(9 - arrowType)),
+			y: radius*Math.sin(Math.PI/(9 - arrowType))
+		};
+		const pt2 = {
+			x: radius*Math.cos(-Math.PI/(9 - arrowType)),
+			y: radius*Math.sin(-Math.PI/(9 - arrowType))
+		};
+
+		/** Computes dot position after passed in rotation matrix */
+		function getRotated(base, dot, isReversedArrow) {
+			const {x, y} = dot;
+			let parsedX, parsedY;
+	
+			if(isReversedArrow) {
+				parsedX = -x*Math.cos(azimut) + y*-Math.sin(azimut);
+				parsedY = -x*Math.sin(azimut) + y*Math.cos(azimut);
+			}
+			else {
+				parsedX = x*Math.cos(azimut) + y*-Math.sin(azimut);
+				parsedY = x*Math.sin(azimut) + y*Math.cos(azimut);
+			}
+
+			/** 
+			 * Computes line slope & returns rotated arrow dot position
+			 * If slope < 0 makes a subtraction instead of an addition
+			 * to invert arrows direction & keep a safe behaviour
+		   */
+			const slope = (end.y - start.y) / (end.x - start.x);
+			if(slope > 0) return [base.x + parsedX, base.y + parsedY];
+			else 					return [base.x + parsedX, base.y - parsedY];
+		}
+
+		c.begin();
+		c.setFillColor(color);
+		c.moveTo(...getRotated(dot, pt1, isReversedArrow));
+		c.lineTo(dot.x, dot.y);
+		c.lineTo(...getRotated(dot, pt2, isReversedArrow));
+		c.fill();
+		c.close();
+	}
+
+	drawLine(startColor, true, arrowType);
+	drawLine(endColor, false, arrowType);
+
+	if(extArrows) {
+		drawArrow(startColor, start, false, arrowType);
+		drawArrow(endColor, end, true, arrowType);	
+	}
+	if(intArrows) {
+		drawArrow(startColor, middle, true, arrowType);
+		drawArrow(endColor, middle, false, arrowType);
+	}
 }
 
 mxCellRenderer.registerShape(
