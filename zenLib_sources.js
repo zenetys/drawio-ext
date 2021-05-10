@@ -1023,7 +1023,8 @@ zenetysShapeBicoloreLine.prototype.paintEdgeShape = function(c, pts) {
 	const intArrows = Boolean(getVariableValue(this, "intArrows"));
 	const extArrows = Boolean(getVariableValue(this, "extArrows"));
 	const arrowType = getVariableValue(this, "arrowType");
-	const [start, end] = pts[0].x <= pts[1].x ? pts : pts.reverse();
+	// const [start, end] = pts[0].x <= pts[1].x ? pts : [pts[1], pts[0]];
+	const [start, end] = pts;
 	const middle = {
 		x: (start.x + end.x) * .5,
 		y: (start.y + end.y) * .5,
@@ -1133,12 +1134,12 @@ zenetysShapeBicoloreLine.prototype.paintEdgeShape = function(c, pts) {
 	drawLine(endColor, false);
 
 	if(extArrows) {
-		drawArrow(startColor, start, false, arrowType);
-		drawArrow(endColor, end, true, arrowType);	
+		drawArrow(startColor, start, start.x > end.x, arrowType);
+		drawArrow(endColor, end, start.x <= end.x, arrowType);
 	}
 	if(intArrows) {
-		drawArrow(startColor, middle, true, arrowType);
-		drawArrow(endColor, middle, false, arrowType);
+		drawArrow(startColor, middle, start.x <= end.x, arrowType);
+		drawArrow(endColor, middle, start.x > end.x, arrowType);
 	}
 }
 
