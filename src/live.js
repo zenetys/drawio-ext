@@ -46,6 +46,8 @@ Draw.loadPlugin(
         parsed: {},
         separators: { list: "---", pair: ":" }
       },
+      apitypes: [
+      ],
       warnings: {},
       property: {
         prefix: "live.property.",
@@ -111,7 +113,8 @@ Draw.loadPlugin(
         LIVE_STYLE,     // graph node's style
         LIVE_TEXT,      // graph node's text
         LIVE_DATA,      // Graph node API
-        LIVE_REF,       // Reference associated with API stored in graph object
+        LIVE_SOURCE,    // path from received API response to get source object (autoset if LIVE_APITYPE is set)
+        LIVE_REF,       // Reference associated with API stored in graph object LIVE_SOURCE
         LIVE_HANDLERS,  // Array containing user defined methods stored in graph root node
       ],
       credentials: [LIVE_USERNAME, LIVE_PASSWORD, LIVE_APIKEY],
@@ -830,6 +833,33 @@ Draw.loadPlugin(
           live.handlers.list = {};
       }
       return live.handlers.list;
+    }
+
+    /**
+     * Transforms raw API response to exploitable data depending on source
+     * @param {object} raw Raw received API response
+     * @param {object} computationDataset Required data to compute exploitable data from API raw response
+     * @returns computed exploitable data
+     */
+    function buildExploitableData(raw, computationDataset = {}) {
+      const {source, post, apitypeId} = computationDataset;
+      const postProcessed = (post) ? post(raw) : raw;
+
+      if (post && !postProcessed)
+        throw Error("'post' function for apitype " + apitypeId + " can't compute an exploitable object");
+
+      const exploitable = new Function(
+        "rawResponse",
+        `return rawResponse${(source) ? "." + source : ""};`
+      )(postProcessed);
+
+      if (!exploitable) {
+        const withPost = (post) ? ("after " + apitypeId + " post process") : "";
+        const withSource = (source) ? ("with given path: " + source) : "";
+        throw Error(`No data available from API ${withPost} ${withSource}`);
+      }
+
+      return exploitable;
     }
 
     /** Stops refresh process & prevents multiple threads */
