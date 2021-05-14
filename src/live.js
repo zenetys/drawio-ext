@@ -33,6 +33,7 @@ Draw.loadPlugin(
     const LIVE_DATA = "live.data";
     const LIVE_SOURCE = "live.source";
     const LIVE_REF = "live.id";
+    const LIVE_HANDLERS = "live.handlers";
 
     const live = {
       isRunning: false,
@@ -40,6 +41,11 @@ Draw.loadPlugin(
       thread: null,
       timeout: 0,
       nodes: [],
+      handlers: {
+        list: {},
+        parsed: {},
+        separators: { list: "---", pair: ":" }
+      },
       warnings: {},
       property: {
         prefix: "live.property.",
@@ -106,6 +112,7 @@ Draw.loadPlugin(
         LIVE_TEXT,      // graph node's text
         LIVE_DATA,      // Graph node API
         LIVE_REF,       // Reference associated with API stored in graph object
+        LIVE_HANDLERS,  // Array containing user defined methods stored in graph root node
       ],
       credentials: [LIVE_USERNAME, LIVE_PASSWORD, LIVE_APIKEY],
       unavailables: [
@@ -118,6 +125,7 @@ Draw.loadPlugin(
         LIVE_DATA,
         LIVE_SOURCE,
         LIVE_REF,
+        LIVE_HANDLERS,
       ]
     };
 
@@ -173,6 +181,7 @@ Draw.loadPlugin(
             addLiveUpdatePalette();
             addLiveTabToFormatPanel();
             overrideFormatPanelRefresh();
+            storeHandlers();
           }
         });
 
@@ -331,10 +340,10 @@ Draw.loadPlugin(
 
       /**
        * Builds an input section in the Live format panel
-       * @param {"property"} type Selects if inputs are for live properties
-       * @param {string} labelStr Text displayed in input field: attribute parsed name
-       * @param {string} attrName Input's corresponding live attribute name
-       * @param {string} targetId Targetted graph node id
+       * @param {"property"|"handler"} type Selects if inputs are for live properties or handlers
+       * @param {string} labelStr Text displayed in input field: attribute parsed name or handler name
+       * @param {string} attrName Input's corresponding live attribute name or handler value
+       * @param {string} targetId Targetted graph node id (empty if in handler type)
        * @returns {object} Set of all HTML elements for the input
        */
       function buildInput(type, labelStr, attrName, target, withWarning) {
@@ -350,7 +359,9 @@ Draw.loadPlugin(
         const targetId = target.getAttribute("id");
         const emptyValue = "";
         const base = mxUtils.findNode(graphXml, "id", live.pageBaseId);
-        const attrValue = target.getAttribute(attrName) || null;
+        const attrValue = (
+          (type === "handler" ? attrName : target.getAttribute(attrName)) || null
+        );
 
         const cb = document.createElement('input');
         cb.setAttribute('type', 'checkbox');
@@ -483,9 +494,8 @@ Draw.loadPlugin(
 
         function handleClickOnCheckbox(e) {
           e.preventDefault();
-          const isChecked = !e.target.checked;
-          if (isChecked) {
-            const propName = attrName;
+          if (!e.target.checked) {
+            const propName = type === "handler" ? labelStr : attrName;
             if (mxUtils.confirm("Are you sure to remove " + propName + " " + type + " ?")) {
               updateGraph(targetId, type, propName);
             }
@@ -505,7 +515,7 @@ Draw.loadPlugin(
         function handleClickOnLabel(e) {
           e.preventDefault();
           if (cb.checked) {
-            const propName = attrName;
+            const propName = type === "handler" ? labelStr : attrName;
             if (mxUtils.confirm("Are you sure to remove " + propName + " " + type + " ?")) {
               cb.checked = !cb.checked;
               updateGraph(targetId, type, propName);
@@ -529,7 +539,7 @@ Draw.loadPlugin(
       /**
        * Builds inputs then appends its to the Live format panel container
        * @param {Array<object>} inputsList List of data for the input build
-       * @param {"classic"} type Selects if inputs are for live attrs
+       * @param {"classic"|"handler"} type Selects if inputs are for live attrs or handlers
        * @param {HTMLElement} container Inputs HTML container
        * @param {Node} targetId Targetted graph node
        */
@@ -548,8 +558,8 @@ Draw.loadPlugin(
           inputSection.style.alignItems = "center";
 
           const warning = getWarning(
-            attributeName,
-            target.getAttribute("id")
+            type === "handler" ? "handler" : attributeName,
+            type === "handler" ? displayedLabel : target.getAttribute("id")
           );
 
           if (warning)
@@ -577,7 +587,7 @@ Draw.loadPlugin(
         titleContainer.style.width = "100%";
         subpanelContainer.appendChild(titleContainer);
 
-        if (title !== "Properties") {
+        if (title !== "Properties" && title !== "Handlers") {
           const baseInputs = [
             ["API", LIVE_API],
             ["API Type", LIVE_APITYPE],
@@ -614,13 +624,22 @@ Draw.loadPlugin(
             }
             handleSubpanelInputs(subpanelContainer, "property", target, propertyInputs);
           }
+          else if (title === "Handlers") {
+            const handlerInputs = [];
+            Object.keys(live.handlers.list).forEach(handlerName => handlerInputs.push([
+              handlerName,
+              live.handlers.list[handlerName]
+            ]));
+            handleSubpanelInputs(subpanelContainer, "handler", target, handlerInputs);
+
+          }
         }
         return subpanelContainer;
       }
 
       /**
-       * Builds a form in the Live format panel 
-       * @param {"property"} type If form is for new property
+       * Builds a form in the Live format panel
+       * @param {"property"|"handler"} type If form is for new property o new handler
        * @param {string} targetId Targetted graph object's id
        */
       function buildFormatPanelForm(type, targetId) {
@@ -700,27 +719,37 @@ Draw.loadPlugin(
         )
       );
 
-      liveFormatPanelContainer.append(
-        buildSubpanel("Properties", target),
-        buildFormatPanelForm("property", targetId)
-      );
+      if (isSelectionMode) {
+        liveFormatPanelContainer.append(
+          buildSubpanel("Properties", target),
+          buildFormatPanelForm("property", targetId)
+        );
+      }
+      else {
+        liveFormatPanelContainer.append(
+          buildSubpanel("Handlers", target),
+          buildFormatPanelForm("handler", targetId)
+        );
+      }
 
       return liveFormatPanelContainer;
     }
 
     /**
      * Updates the xml graph using format panel components.
-     * Updates nodes live properties depending on affected type
+     * Updates nodes live properties or handlers depending on affected type
      * @param {string} targetId Targetted graph node id
-     * @param {"property"} type Defines kind of update
-     * @param {string} name Name of the attribute to update
+     * @param {"property"|"handler"} type Defines kind of update
+     * @param {string} name Name of the attribute to update or of the handler
      * @param {string} value Corresponding value
      */
     function updateGraph(targetId, type, name, value = null) {
       const selectedCells = [...ui.editor.graph.selectionModel.cells];
       const graphXml = ui.editor.getGraphXml();
       const target = mxUtils.findNode(graphXml, "id", targetId);
-      const msg = { prop: ("Property " + name + " ") };
+      const msg = {
+        prop: type === "property" ? "Property " + name + " " : "Handlers updated: "
+      };
 
       if (type === "property") {
         if (value) {
@@ -731,7 +760,29 @@ Draw.loadPlugin(
           target.removeAttribute(name);
           msg.action = "removed from ";
         }
-      } 
+      }
+      else if (type === "handler") {
+        const handlers = storeHandlers();
+        msg.action = handlers[name] ? value ? " modified" : " deleted" : " added";
+
+        /** Updates targetted handler */
+        if (handlers[name]) {
+          if (value)
+            handlers[name] = value;
+          else
+            delete handlers[name];
+        }
+        else
+          handlers[name] = value;
+
+        /** Stores & stringifies handlers to get the node updated value */
+        storeHandlers(true, handlers);
+        const sep = live.handlers.separators;
+        const handlersAttributeValue = Object.keys(handlers).map(
+          (key) => `${key}${sep.pair}${handlers[key]}`
+        ).join(sep.list);
+        target.setAttribute(LIVE_HANDLERS, handlersAttributeValue);
+      }
 
       ui.editor.setGraphXml(graphXml);
       ui.editor.graph.selectionModel.changeSelection(selectedCells);
@@ -741,8 +792,44 @@ Draw.loadPlugin(
       else
         msg.obj = "object with id " + targetId;
 
-      if (type === "property") log(msg.prop + msg.action + msg.obj);
+      if (type === "property")
+        log(msg.prop + msg.action + msg.obj);
+
+      if (type === "handler")
+        log(msg.prop + name + msg.action);
+
       resetScheduleUpdate();
+    }
+
+    function storeHandlers(rebuild = false, computed = false) {
+      if (!rebuild && Object.keys(live.handlers.list).length > 0) return live.handlers.list;
+
+      if (computed) {
+        live.handlers.list = computed;
+        getHandlersMethods();
+      }
+      else {
+        const graphXml = ui.editor.getGraphXml();
+        const root = mxUtils.findNode(graphXml, "id", live.pageBaseId);
+        const handlersStr = root.getAttribute(LIVE_HANDLERS);
+        const sep = live.handlers.separators;
+        const handlers = {};
+
+        if (handlersStr) {
+          /** Parses input string to work in handlers object */
+          handlersStr.split(sep.list).forEach(pair => {
+            const limit = pair.indexOf(sep.pair);
+            const key = pair.slice(0, limit);
+            const handler = pair.slice(limit + 1);
+            handlers[key] = handler;
+          });
+          live.handlers.list = handlers;
+          getHandlersMethods();
+        }
+        else
+          live.handlers.list = {};
+      }
+      return live.handlers.list;
     }
 
     /** Stops refresh process & prevents multiple threads */
@@ -1112,6 +1199,69 @@ Draw.loadPlugin(
     }
 
     /**
+     * Parses a string stored in handlers to an available function.
+     * @param {string} handler String containing the function definition
+     * @returns {Function} Parsed function
+     */
+    function parseStringHandler(handler) {
+      function getArgs() {
+        return handler.slice(
+          handler.indexOf("(") + 1,
+          handler.indexOf(")"),
+        ).split(",").map(arg => arg.trim());
+      }
+      handler.trim();
+      const isArrowFunctionWithOneArg = (
+        !handler.startsWith("function") && !handler.startsWith("(")
+      );
+      const isNotArrowFunction = handler.startsWith("function");
+
+      const args = isArrowFunctionWithOneArg ? [
+        handler.slice(0, handler.indexOf("=>")).trim()
+      ] : getArgs();
+
+      const instructions = isNotArrowFunction ? handler.slice(
+        handler.indexOf("{")
+      ) : handler.slice(handler.indexOf("=>") + 2).trim();
+
+      try {
+        return new Function(
+          ...args,
+          `${instructions.startsWith("{") ? "" : "return "}${instructions}`
+        );
+      }
+      catch(e) {
+        throw Error(
+          "Given string cannot be parsed to an available function. " +
+          "You should make sure that it is properly written."
+        )
+      }
+    }
+
+    /**
+     * Parses handlers methods from given string inputs.
+     * Creates an object containing associated JS methods for every
+     * stored handler key which is returned & stored in `live.handlers.parsed`.
+     * @returns {{handlerName: Function}} Parsed handlers
+     */
+    function getHandlersMethods() {
+      const handlers = {};
+      Object.keys(live.handlers.list).forEach(
+        key => {
+          try {
+            handlers[key] = parseStringHandler(live.handlers.list[key]);
+            setWarning("handler", key);
+          }
+          catch(e) {
+            setWarning("handler", key, e.message);
+          }
+        }
+      );
+      live.handlers.parsed = handlers;
+      return handlers;
+    }
+
+    /**
      * Computes attribute updated value using fechted named APIs
      * responses & instructions set in live attribute value
      * @param {[{response, ref}]} apiResponses List of named APIs
@@ -1121,11 +1271,14 @@ Draw.loadPlugin(
      */
     function updateLiveAttribute(apiResponses, nodeApiRef, instructions) {
       const selfApiResponse = apiResponses[nodeApiRef];
+      const handlerKeys = Object.keys(live.handlers.parsed);
+      const handlerMethods = handlerKeys.map(name => live.handlers.parsed[name]);
       const updatedValue = new Function(
-        "data", 
-        "self", 
+        "data",
+        "self",
+        ...handlerKeys,
         instructions.slice(1)
-      )(apiResponses, selfApiResponse);
+      )(apiResponses, selfApiResponse, ...handlerMethods);
 
       if (!updatedValue)
         throw Error("Instructions set didn't return anything");
@@ -1268,8 +1421,8 @@ Draw.loadPlugin(
 
     /**
      * Stores a warning for a graph element live attribute in live.warnings
-     * @param {string} attribute Targetted live attribute
-     * @param {string} objectId Targetted graph object id
+     * @param {string} attribute Targetted live attribute | "handler"
+     * @param {string} objectId Targetted graph object id | handler name
      * @param {string} message Warning message to store
      */
     function setWarning(attribute, objectId, message = undefined) {
@@ -1290,8 +1443,9 @@ Draw.loadPlugin(
 
     /**
      * Searches in live.warnings if the live attribute of a graph object has a saved warning
-     * @param {string} attribute Targetted live attribute
-     * @param {string|} objectId Targetted graph object id
+     * In handlers case, objectId === handler name
+     * @param {string} attribute Targetted live attribute | "handler"
+     * @param {string|} objectId Targetted graph object id | handler name
      * @returns {string} object attribute's corresponding id or an empty string
      */
     function getWarning(attribute, objectId) {
@@ -1302,7 +1456,13 @@ Draw.loadPlugin(
     }
 
     function clearWarnings() {
-      live.warnings = {};
+      if (live.warnings.handler) {
+        const handler = {...live.warnings.handler};
+        live.warnings = { handler };
+      }
+      else {
+        live.warnings = {};
+      }
     }
 
     function log(...text) {
