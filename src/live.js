@@ -36,10 +36,10 @@
     const LIVE_HANDLERS = "live.handlers";
 
     const live = {
+      isRunning: false,
       pageBaseId: undefined,
       thread: null,
       timeout: 0,
-      isInit: false,
       nodes: [],
       handlers: {
         list: {},
@@ -97,6 +97,11 @@
       formatPanel: {
         arePropertiesShown: false,
         isDisplayed: false,
+      },
+      paletteButtons: {
+        start: ["⏺︎","Start graph live update",startScheduleUpdate],
+        pause: ["⏸","Stop graph live update",pauseScheduleUpdate],
+        reload:["🔄","Reload graph live data",loadUpdatesData],
       },
       all: [
         LIVE_USERNAME,  // "username" credential
@@ -166,13 +171,13 @@
 
         // Wait for file to be loaded if no animation data is present
         if (!startAnimation()) {
-          ui.editor.addListener('fileLoaded', restartScheduleUpdate);
+          ui.editor.addListener('fileLoaded', startScheduleUpdate);
         }
       }
       else {
         ui.format.showCloseButton = false;
         ui.editor.addListener("fileLoaded", function(e) {
-          // Inits live features on page wake & prevents multi loads
+          /** Inits live features on page wake & prevents multi loads */
           if(!ui.isLivePluginEnabled) {
             ui.isLivePluginEnabled = true;
             live.pageBaseId = ui.currentPage.root.getId();
@@ -181,18 +186,21 @@
             overrideFormatPanelRefresh();
             storeHandlers();
           }
+        });
 
-          // Adds a listener to stop the ongoing update process if page changed
-          ui.editor.addListener(mxUtils.CHANGE, function() {
-            if(ui && ui.currentPage && ui.currentPage.root) {
-              const currentPageBaseId = ui.currentPage.root.getId();
-              if(live.pageBaseId !== currentPageBaseId) {
-                if(live.thread) log("Refresh feature stopped due to graph page change");
-                resetScheduleUpdate();
+        /** Adds a listener to stop the ongoing update process if page changed */
+        ui.editor.addListener(mxUtils.CHANGE, function() {
+          if(ui && ui.currentPage && ui.currentPage.root) {
+            const currentPageBaseId = ui.currentPage.root.getId();
+            if(live.pageBaseId !== currentPageBaseId) {
+              if(live.thread) {
+                log("Refresh feature stopped due to graph page change");
+                pauseScheduleUpdate();
+                loadUpdatesData();
                 storeHandlers(true);
               }
             }
-          });
+          }
         });
       }
     }
@@ -204,22 +212,7 @@
       }
       else {
         ui.toolbar.addSeparator();
-        const buttons = [
-          ["⏺︎","Start graph live update",startScheduleUpdate],
-          ["⏸","Stop graph live update",pauseScheduleUpdate],
-          ["🔄","Reload current graph & start live update",restartScheduleUpdate],
-        ];
-
-        for(const button of buttons) {
-          const [label, tooltip, funct] = button;
-          ui.toolbar.addMenuFunction(
-            label,
-            tooltip,
-            true,
-            funct,
-            ui.toolbar.container
-          );
-        }
+        updateLivePalette(false, true);
       }
     }
 
@@ -602,7 +595,6 @@
             handleSubpanelInputs(subpanelContainer, "property", target, propertyInputs);
           } 
           else if(title === "Handlers") {
-            //! ON EST LAAA
             const handlerInputs = [];
             Object.keys(live.handlers.list).forEach(handlerName => handlerInputs.push([
               handlerName,
@@ -761,7 +753,6 @@
 
       if(type === "property") log(msg.prop + msg.action + msg.obj);
       if(type === "handler") log(msg.prop + name + msg.action);
-      resetScheduleUpdate();
     }
 
     function storeHandlers(rebuild = false, computed = false) {
@@ -827,34 +818,65 @@
       live.thread = null;
     }
 
-    /** "live-start" action handler */
+    /**
+     * Updates live status buttons in Live Palette according to current working status
+     * @param {boolean} newStatus Plugin current working status
+     * @param {boolean} isInit True in case of palette init
+     */
+    function updateLivePalette(newStatus = true, isInit = false) {
+      if(!isInit) {
+        ui.toolbar.container.removeChild(ui.toolbar.container.lastChild);
+        ui.toolbar.container.removeChild(ui.toolbar.container.lastChild);
+      }
+
+      live.isRunning = newStatus;
+      const buttons = [
+        live.paletteButtons[live.isRunning ? "pause" : "start"],
+        live.paletteButtons.reload
+      ];
+
+      buttons.forEach(
+        ([label, tooltip, funct]) => ui.toolbar.addMenuFunction(
+          label, 
+          tooltip, 
+          true, 
+          funct, 
+          ui.toolbar.container
+        )
+      );
+    }
+
+    /** Starts update process */
     function startScheduleUpdate() {
       if(live.thread === null) {
+        updateLivePalette(true);
+
+        // Loads live data on first start
+        if(live.nodes.length === 0) loadUpdatesData();
         doUpdate();
       } else {
         log("live thread already running - thread id:", live.thread);
       }
     };
 
-    /** "live-pause" action handler */
+    /** Pauses live update process */
     function pauseScheduleUpdate() {
       clearThread(live.thread);
+      updateLivePalette(false);
     }
 
     /** Resets live update parameters */
-    function resetScheduleUpdate() {
+    function loadUpdatesData() {
       live.ids = [];
       live.nodes = [];
-      live.isInit = false;
       live.timeout = 0;
       live.pageBaseId = ui.currentPage.root.getId();
-      clearThread(live.thread);
-    }
 
-    /** "live-restart" action handler */
-    function restartScheduleUpdate() {
-      resetScheduleUpdate();
-      startScheduleUpdate();
+
+      const graphXml = ui.editor.getGraphXml();
+      const baseNode = mxUtils.findNode(graphXml, "id", live.pageBaseId);
+      live.timeout = (+(baseNode.getAttribute(LIVE_REFRESH) + "000")) || 10000;
+      live.nodes = findLiveNodes(graphXml);
     }
 
     /**
@@ -1216,14 +1238,12 @@
     function doUpdate() {
       clearThread(live.thread);
       clearWarnings();
-      const graphXml = ui.editor.getGraphXml();
-      const baseNode = mxUtils.findNode(graphXml, "id", live.pageBaseId);
-      if(!live.isInit) {
-        live.timeout = (+(baseNode.getAttribute(LIVE_REFRESH) + "000")) || 10000;
-        live.nodes = findLiveNodes(graphXml);
-        live.isInit = true;
-      }
-
+      const baseNode = mxUtils.findNode(
+        ui.editor.getGraphXml(), 
+        "id", 
+        live.pageBaseId
+      );
+      
       /** Initiates the xml doc to perform the updates & the arrays which store APIs data */
       const xmlUpdatesDoc = mxUtils.createXmlDocument();
       const updatesList = xmlUpdatesDoc.createElement("updates");
