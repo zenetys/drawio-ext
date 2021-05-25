@@ -202,6 +202,13 @@
             }
           }
         });
+
+        /** Adds a listener to stop update process when a graph node is selected */
+        ui.editor.graph.selectionModel.addListener(mxUtils.CHANGE, function() {
+          const isSelectionEmpty = ui.editor.graph.isSelectionEmpty();
+          const { isRunning } = live;
+          if(isRunning && !isSelectionEmpty) pauseScheduleUpdate();
+        });
       }
     }
 
