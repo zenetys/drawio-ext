@@ -1253,15 +1253,30 @@
           if(!apiData) return;
         }
 
+        /** Computes & stores api responses */
         try {
           /** Builds dataset (url, credentials, sources) to perform the request */
           const url = buildUrl(apiData, liveNode, baseNode);
-          const credentials = getCredentials(liveNode, baseNode);
-          const rawResponse = computeApiResponse(url, false, credentials);
-          const dataset = getDataToFinalizeResponse(liveNode, baseNode);
-          const parsedResponse = buildExploitableData(rawResponse, dataset);
-  
-          namedApis.push({response: parsedResponse, ref: apiRef || id});
+          let parsedResponse = undefined;
+          const isAlreadyComputed = namedApis.find(api => api.url === url);
+
+          /**
+           * Checks if corresponding url response is already 
+           * computed in order to prevent multi calls on same API 
+           */
+          if(isAlreadyComputed) parsedResponse = isAlreadyComputed.response;
+          else {
+            const credentials = getCredentials(liveNode, baseNode);
+            const rawResponse = computeApiResponse(url, false, credentials);
+            const dataset = getDataToFinalizeResponse(liveNode, baseNode);
+            parsedResponse = buildExploitableData(rawResponse, dataset);
+          }
+          
+          namedApis.push({
+            response: parsedResponse,
+            ref: apiRef || id, 
+            url
+          });
         } catch(e) {
           setWarning(LIVE_DATA, id, e.message);
         }
@@ -1294,7 +1309,7 @@
                 const url = buildUrl(attrValue, liveNode.elt, baseNode);
                 const targettedAnonApi = anonApis.find(api => api.url === url);
 
-                if(targettedAnonApi) updatedValue = targettedApi.response;
+                if(targettedAnonApi) updatedValue = targettedAnonApi.response;
                 else {
                   const credentials = getCredentials(liveNode.elt, baseNode);
                   updatedValue = computeApiResponse(url, true, credentials);
