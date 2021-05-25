@@ -47,7 +47,7 @@ function addCustomProperty(name, type, shape, min = undefined, max = undefined, 
 	const property = {};
 	const displayedName = (
 		name.charAt(0).toUpperCase() + 
-		name.slice(1).replace(/([A-Z])/g, " $1").trim()
+		name.slice(1).replace(/([A-Z])/g, " $1").replace(/([0-9])/g, " $1").trim()
 	);
 	property.name = name;
 	property.dispName = displayedName;
@@ -115,7 +115,9 @@ function zenetysShapeGaugeLinear(bounds, fill, stroke, strokewidth = 1) {
 mxUtils.extend(zenetysShapeGaugeLinear, mxShape);
 
 zenetysShapeGaugeLinear.prototype.cst = {
-  SCALE_COLORS : 'scaleColors',
+	FILL_COLOR_1: "fillColor1",
+	FILL_COLOR_2: "fillColor2",
+	FILL_COLOR_3: "fillColor3",
   SCALE_STAGES : 'scaleStages',
   GAUGE_LABEL : 'gaugeLabel',
   TEXT_COLOR : 'textColor',
@@ -127,9 +129,13 @@ zenetysShapeGaugeLinear.prototype.cst = {
 
 zenetysShapeGaugeLinear.prototype.defaultValues = {
 	gaugeType: "horizontal",
-	scaleColors: '#00FF00,#FF8000,#FF0000',
-	scaleStages: '50,80',
-	textColor: '#000',
+
+	fillColor1: "#00FF00",
+	fillColor2: "#FF8000",
+	fillColor3: "#FF0000",
+
+	scaleStages: "50,80",
+	textColor: "#000",
 	textSize: 12,
 	percentage: 25,
 };
@@ -143,7 +149,9 @@ zenetysShapeGaugeLinear.prototype.customProperties = [
 	addLinearProperty("percentage", 	"float", 0, 100),
 	addLinearProperty("gaugeType", 		"enum"),
 	addLinearProperty("scaleStages", 	"String"),
-	addLinearProperty("scaleColors", 	"String"),
+	addLinearProperty("fillColor1", 	"color"),
+	addLinearProperty("fillColor2", 	"color"),
+	addLinearProperty("fillColor3", 	"color"),
 	addLinearProperty("textSize", 		"int"),
 	addLinearProperty("textColor", 		"color"),
 ];
@@ -158,7 +166,7 @@ zenetysShapeGaugeLinear.prototype.paintVertexShape = function(c, x, y, w, h) {
 zenetysShapeGaugeLinear.prototype.drawGauge = function(
 	c, w, h, 			// mxGraph stuff
 	orientation,
-	color = '#FFF', 
+	color = "#FFF", 
 	percentage = 100, 
 	isOutline = false
 ) {
@@ -192,20 +200,25 @@ zenetysShapeGaugeLinear.prototype.background = function(c, w, h) {
 };
 
 zenetysShapeGaugeLinear.prototype.foreground = function(c, w, h) {
-	const scaleColors = getVariableValue(this, "scaleColors", true);
 	const scaleStages = getVariableValue(this, "scaleStages", true);
 	const textColor = 	getVariableValue(this, "textColor");
 	const textSize =		getVariableValue(this, "textSize");
 	const gaugeType = 	getVariableValue(this, "gaugeType");
 	const percentage = 	inRange(getVariableValue(this, "percentage"));
-
+	const scaleColors = [
+		getVariableValue(this, "fillColor1"),
+		getVariableValue(this, "fillColor2"),
+		getVariableValue(this, "fillColor3"),
+	];
 	const gaugeColor = getGaugeColor(percentage, scaleColors, scaleStages);
+
 	this.drawGauge(c, w, h, gaugeType, gaugeColor, percentage); 	// draw fill
 	this.drawGauge(c, w, h, gaugeType, gaugeColor, 100, true); 	// draw outline
 
 	c.setFontSize(textSize);
 	c.setFontColor(textColor);
-	
+
+	//* 10: space between gauge bottom & text
 	const textVerticalOffset = 10;
 	addText(c, w*.5, h + textVerticalOffset, percentage);
 };
@@ -266,11 +279,17 @@ zenetysShapeGaugeNumber.prototype.cst = {
 	IS_FILLED: 'isFilled',
 	IS_OUTLINED: 'isOutlined',
 	IS_COLORIZED: 'isColorized',
-	
 	STAGES : 'stages',
-	FILL_COLORS : 'fillColors',
-	OUTLINE_COLORS : 'outlineColors',
-	TEXT_COLORS : 'textColors',
+
+	FILL_COLOR_1 : 'fillColor1',
+	FILL_COLOR_2 : 'fillColor2',
+	FILL_COLOR_3 : 'fillColor3',
+	OUTLINE_COLOR_1 : 'outlineColor1',
+	OUTLINE_COLOR_2 : 'outlineColor2',
+	OUTLINE_COLOR_3 : 'outlineColor3',
+	TEXT_COLOR_1 : 'textColor1',
+	TEXT_COLOR_2 : 'textColor2',
+	TEXT_COLOR_3 : 'textColor3',
 	
 	SHAPE : 'zenShape.gauge.number',
 };
@@ -284,10 +303,19 @@ zenetysShapeGaugeNumber.prototype.defaultValues = {
 	isOutlined:true,
 	isColorized:true,
 
-	stages:'50,80',
-	fillColors: '#99FF99,#FFCC99,#FF9999',
-	outlineColors: '#00FF00,#FF8000,#FF0000',
-	textColors: '#009900,#994C00,#990000',
+	stages:"50,80",
+
+	fillColor1: "#99FF99",
+	fillColor2: "#FFCC99",
+	fillColor3: "#FF9999",
+
+	outlineColor1: "#00FF00",
+	outlineColor2: "#FF8000",
+	outlineColor3: "#FF0000",
+
+	textColor1: "#009900",
+	textColor2: "#994C00",
+	textColor3: "#990000",
 };
 
 function addNumberProperty(name, type, min = undefined, max = undefined) {
@@ -298,13 +326,22 @@ zenetysShapeGaugeNumber.prototype.customProperties = [
 	addNumberProperty("percentage",		"float", 0, 100),
 	addNumberProperty("textSize",			"int", 1),
 	addNumberProperty("strokeWidth",	"int", 1),
-	addNumberProperty("isFilled",			"bool"),
-	addNumberProperty("isOutlined",		"bool"),
-	addNumberProperty("isColorized",	"bool"),
 	addNumberProperty("stages",				"String"),
-	addNumberProperty("fillColors",		"String"),
-	addNumberProperty("outlineColors","String"),
-	addNumberProperty("textColors",		"String"),
+	
+	addNumberProperty("isFilled",			"bool"),
+	addNumberProperty("fillColor1",		"color"),
+	addNumberProperty("fillColor2",		"color"),
+	addNumberProperty("fillColor3",		"color"),
+	
+	addNumberProperty("isOutlined",		"bool"),
+	addNumberProperty("outlineColor1","color"),
+	addNumberProperty("outlineColor2","color"),
+	addNumberProperty("outlineColor3","color"),
+	
+	addNumberProperty("isColorized",	"bool"),
+	addNumberProperty("textColor1",		"color"),
+	addNumberProperty("textColor2",		"color"),
+	addNumberProperty("textColor3",		"color"),
 ];
 
 zenetysShapeGaugeNumber.prototype.paintVertexShape = function(c, x, y, w, h) {
@@ -328,9 +365,22 @@ zenetysShapeGaugeNumber.prototype.foreground = function(c, w, h) {
 	const isOutlined 		= getVariableValue(this, "isOutlined");
 	const isColorized 	= getVariableValue(this, "isColorized");	
 	const stages 				= getVariableValue(this, "stages", true);
-	const fillColors 		= getVariableValue(this, "fillColors", true);
-	const outlineColors = getVariableValue(this, "outlineColors", true);
-	const textColors 		= getVariableValue(this, "textColors", true);
+
+	const fillColors 		= [
+		getVariableValue(this, "fillColor1"),
+		getVariableValue(this, "fillColor2"),
+		getVariableValue(this, "fillColor3"),
+	];
+	const outlineColors = [
+		getVariableValue(this, "outlineColor1"),
+		getVariableValue(this, "outlineColor2"),
+		getVariableValue(this, "outlineColor3"),
+	];
+	const textColors 		= [
+		getVariableValue(this, "textColor1"),
+		getVariableValue(this, "textColor2"),
+		getVariableValue(this, "textColor3"),
+	];
 
 	const DEFAULT_FILLCOLOR = "#FFFFFF";
 	c.setFillColor(isFilled ? getGaugeColor(percentage, fillColors, stages):DEFAULT_FILLCOLOR);
@@ -412,7 +462,9 @@ zenetysShapeGaugeSpeedometer.prototype.cst = {
 	DISPLAY_TEXT: "displayText",
 	PERCENTAGE : "percentage",
 	GAUGE_TYPE: "gaugeType",
-  SCALE_COLORS : "scaleColors",
+	FILL_COLOR_1: "fillColor1",
+	FILL_COLOR_2: "fillColor2",
+	FILL_COLOR_3: "fillColor3",
   SCALE_STAGES : "scaleStages",
   SHAPE : "zenShape.gauge.speedometer",
 	TEXT_COLOR: "textColor",
@@ -428,7 +480,9 @@ zenetysShapeGaugeSpeedometer.prototype.cst = {
 zenetysShapeGaugeSpeedometer.prototype.defaultValues = {
   percentage: 25,
   scaleStages: "50,80",
-  scaleColors: "#00FF00,#FF8000,#FF0000",
+  fillColor1: "#00FF00",
+  fillColor2: "#FF8000",
+  fillColor3: "#FF0000",
 	gaugeType: "circle",
 	displayText: true,
 	textColor: "#000",
@@ -450,7 +504,9 @@ zenetysShapeGaugeSpeedometer.prototype.customProperties = [
 	addSpeedometerProperty("displayText", "bool"),
 	addSpeedometerProperty("textColor", "color"),
 	addSpeedometerProperty("scaleStages", "String"),
-	addSpeedometerProperty("scaleColors", "String"),
+	addSpeedometerProperty("fillColor1", "color"),
+	addSpeedometerProperty("fillColor2", "color"),
+	addSpeedometerProperty("fillColor3", "color"),
 	addSpeedometerProperty("needleStyle", "enum", null, null, "needleStyles"),
 	addSpeedometerProperty("needleColor", "color"),
 ];
@@ -587,9 +643,14 @@ zenetysShapeGaugeSpeedometer.prototype.foreground = function(c, w, h) {
 
 	const needleStyle	= getVariableValue(this, "needleStyle");
 	const needleColor	= getVariableValue(this, "needleColor");
+
 	const displayText	= getVariableValue(this, "displayText");
 	const scaleStages = getVariableValue(this, "scaleStages", true);
-	const scaleColors = getVariableValue(this, "scaleColors", true);
+	const scaleColors = [
+		getVariableValue(this, "fillColor1"),
+		getVariableValue(this, "fillColor2"),
+		getVariableValue(this, "fillColor3"),
+	];
 	const percentage	= getVariableValue(this, "percentage");
 	const gaugeType   = getVariableValue(this, "gaugeType");
 	const textColor   = getVariableValue(this, "textColor");
