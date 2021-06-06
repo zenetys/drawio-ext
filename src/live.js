@@ -801,7 +801,6 @@ Draw.loadPlugin(
       if (type === "handler")
         log(msg.prop + name + msg.action);
 
-      resetScheduleUpdate();
     }
 
     function storeHandlers(rebuild = false, computed = false) {
