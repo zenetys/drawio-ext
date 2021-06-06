@@ -481,8 +481,6 @@ Draw.loadPlugin(
 
         function handleFocusoutOfTextInput() {
           let initialValue = undefined;
-          if (type === "property") initialValue = target.getAttribute(attrName) || "";
-          const propName = attrName;
 
           if (type === "property")
             initialValue = target.getAttribute(attrName) || "";
