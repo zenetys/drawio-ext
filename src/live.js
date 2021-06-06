@@ -192,9 +192,9 @@ Draw.loadPlugin(
           if (ui && ui.currentPage && ui.currentPage.root) {
             const currentPageBaseId = ui.currentPage.root.getId();
             if (live.pageBaseId !== currentPageBaseId) {
-              if (live.thread)
+              if (live.thread) {
                 log("Refresh feature stopped due to graph page change");
-              pauseScheduleUpdate();
+                pauseScheduleUpdate();
               }
               // Reset live base data
               live.pageBaseId = ui.currentPage.root.getId();
@@ -1366,7 +1366,9 @@ Draw.loadPlugin(
            * Checks if corresponding url response is already 
            * computed in order to prevent multi calls on same API 
            */
-          if(isAlreadyComputed) parsedResponse = isAlreadyComputed.response;
+          if (isAlreadyComputed) {
+            parsedResponse = isAlreadyComputed.response;
+          }
           else {
             const credentials = getCredentials(liveNode, baseNode);
             const rawResponse = computeApiResponse(url, false, credentials);
@@ -1374,12 +1376,9 @@ Draw.loadPlugin(
             parsedResponse = buildExploitableData(rawResponse, dataset);
           }
           
-          namedApis.push({
-            response: parsedResponse,
-            ref: apiRef || id, 
-            url
-          });
-        } catch(e) {
+          namedApis.push({ response: parsedResponse, ref: apiRef || id, url });
+        }
+        catch(e) {
           setWarning(LIVE_DATA, id, e.message);
         }
       });
