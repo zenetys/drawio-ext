@@ -180,7 +180,6 @@ Draw.loadPlugin(
           // Inits live features on page wake & prevents multi loads
           if (!ui.isLivePluginEnabled) {
             ui.isLivePluginEnabled = true;
-            live.pageBaseId = ui.currentPage.root.getId();
             addLiveUpdatePalette();
             addLiveTabToFormatPanel();
             overrideFormatPanelRefresh();
@@ -196,6 +195,9 @@ Draw.loadPlugin(
               if (live.thread)
                 log("Refresh feature stopped due to graph page change");
               pauseScheduleUpdate();
+              }
+              // Reset live base data
+              live.pageBaseId = ui.currentPage.root.getId();
             }
           }
         });
