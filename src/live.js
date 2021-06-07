@@ -907,9 +907,7 @@ Draw.loadPlugin(
         return;
       }
 
-      // Loads live data on first start
-      if (live.nodes.length === 0)
-        loadUpdatesData();
+      loadUpdatesData();
 
       doUpdate();
     }
@@ -929,9 +927,7 @@ Draw.loadPlugin(
 
       updateLivePalette(true);
 
-      // Loads live data on first start
-      if (live.nodes.length === 0)
-        loadUpdatesData();
+      loadUpdatesData();
 
       loopUpdate();
     }
