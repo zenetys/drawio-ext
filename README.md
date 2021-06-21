@@ -1,20 +1,22 @@
 # Extensions for Draw.IO
 ## LIVE PLUGIN
 
-Live is a plugin extension for Draw.IO / Diagram.net allowing to update separately each node of a graph using REST API. Configuration is made using a custom panel "Live" in application's Format Panel.
+Live is a plugin extension for Draw.IO / Diagram.net allowing to update separately each node of a graph using generic REST API. Configuration is done using a custom panel "Live" in application's Format Panel.
 
 ### Getting started
 
 #### Enable module
 
-1. Start Draw-IO at https://app.diagrams.net/
+Cause by CSP, official diagrams.net website can't load plugins from extra-source: https://github.com/jgraph/drawio/issues/958. Try our self-hosted install at https://draw.zenetys.com/ or use a CSP by-pass plugin (Use at your own risk).
+
+1. Start Draw-IO at https://draw.zenetys.com/
 2. Load plugins section using menu "Extras", sub-menu "Plugins"
 3. Select "Add..." to add plugin
 4. Then select "Custom..." to add non distributed plugins
 5. Enter URL :
   * Self hosting URL to live.js
   * Or Zenetys hosted URL at https://draw.zenetys.com/plugins/live.js
-6. Reload (Ctrl+R) IHM and have fun ! (two new button should appear in action bar).
+6. Reload (Shift+F5) IHM, accept the warning popup about loading external javascript and have fun ! (two new button should appear in action bar).
 
 #### First dynamic graph
 
