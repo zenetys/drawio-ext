@@ -940,6 +940,8 @@ Draw.loadPlugin(
 
     /** Resets live update parameters */
     function loadUpdatesData() {
+      if (live.ids) delete live.ids;
+      if (live.nodes) delete live.nodes;
       live.ids = [];
       live.nodes = [];
       live.timeout = 0;
