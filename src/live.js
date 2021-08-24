@@ -1478,7 +1478,7 @@ Draw.loadPlugin(
       if (!live.warnings[attribute])
         return "";
       else
-        return live.warnings[attribute][objectId]?.join("\n") || "";
+        return live.warnings[attribute][objectId].join("\n") || "";
     }
 
     function clearWarnings() {
