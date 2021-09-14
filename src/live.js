@@ -50,6 +50,7 @@
         { id: "elastic", source: "hits.hits[0]._source" },
         { id: "hastat", post: hastatBuildObject },
       ],
+      apitypeDefault: { id: "raw"},
       warnings: {},
       property: {
         prefix: "live.property.",
@@ -345,7 +346,7 @@
        * @param {"property"|"handler"} type Selects if inputs are for live properties or handlers
        * @param {string} labelStr Text displayed in input field: attribute parsed name or handler name
        * @param {string} attrName Input's corresponding live attribute name or handler value
-       * @param {string} targetId Targetted graph node id (empty if in handler type)
+       * @param {Node} target Targetted graph node (empty if in handler type)
        * @returns {object} Set of all HTML elements for the input
        */
       function buildInput(type, labelStr, attrName, target, withWarning) {
@@ -354,22 +355,17 @@
             cb: null,
             shortField: null,
             longField: null,
-            label: null
+            label: null,
+            select: null,
           };
         }
 
         const targetId = target.getAttribute("id");
         const emptyValue = "";
-        const base = mxUtils.findNode(graphXml, "id", live.pageBaseId);
+        const root = mxUtils.findNode(graphXml, "id", live.pageBaseId);
         const attrValue = (
           (type === "handler" ? attrName : target.getAttribute(attrName)) || null
         );
-
-        const cb = document.createElement('input');
-        cb.setAttribute('type', 'checkbox');
-        cb.style.margin = '3px 3px 0px 0px';
-        cb.checked = attrValue;
-        cb.title = (cb.checked ? "Remove " : "Add ") + type;
 
         const customCb = document.createElement("span");
         customCb.style.width = "10px";
@@ -378,8 +374,6 @@
         customCb.style.padding = "0px";
         customCb.style.border = "1px solid " + (withWarning ? "#FA0" : "#aaa");
 
-        if (cb.checked)
-          customCb.style.backgroundColor = withWarning ? "#FC0" : "#ccc";
 
         const label = document.createElement("label");
         label.style.textOverflow = "ellipsis";
@@ -387,155 +381,167 @@
         label.style.lineHeight = "12px";
         mxUtils.write(label, labelStr + (withWarning ? " ⚠" : ""));
 
-        /**
-         * Creates an input or textarea field depending on hrmlTag value
-         * @param {string} htmlTag HTML node name
-         * @returns {HTMLElement} Created node
-         */
-        function createField(htmlTag) {
-          const elt = document.createElement(htmlTag);
-          elt.value = attrValue;
-          elt.style.boxSizing = "border-box";
-          elt.style.margin = "0";
-          elt.style.padding = "0";
-          elt.style.border = `1px ${attrValue ? "solid":"dashed"} #aaa`;
-          elt.style.backgroundColor = Format.inactiveTabBackgroundColor;
-          elt.style.borderRadius = "0px";
-          elt.style.fontStyle = (attrValue) ? "normal" : "italic";
-          if (htmlTag === "input") {
-            elt.style.width = "50%";
-            elt.type = "text";
-            elt.style.height = "20px";
-            elt.style.float = "right";
-            elt.style.marginLeft = "auto";
-            elt.style.paddingLeft = "2px";
-          }
-          else if (htmlTag === "textarea") {
-            elt.style.width = "100%";
-            elt.rows = 5;
-            elt.style.resize = "vertical";
-            elt.style.display = "none";
-            elt.style.outline = "none";
-          }
+        if (attrName !== LIVE_APITYPE) {
+
+          const cb = document.createElement('input');
+          cb.setAttribute('type', 'checkbox');
+          // cb.style.margin = '3px 3px 0px 0px';
+          cb.checked = attrValue;
+          // cb.title = (cb.checked ? "Remove " : "Add ") + type;
+
+          if (cb.checked)
+            customCb.style.backgroundColor = withWarning ? "#FC0" : "#ccc";
+
 
           /**
-           * Computes placeholder for "source" live format panel input.
-           * Checks depend on nodes **LIVE_APITYPE** & **LIVE_SOURCE** attributes
-           * @param {Node} target Targetted graph node
-           * @param {Node} base Graph base node
-           * @returns {string} Computed placeholder or default empty value
+           * Creates an input or textarea field depending on hrmlTag value
+           * @param {string} htmlTag HTML node name
+           * @returns {HTMLElement} Created node
            */
-          function getSourcePlaceholder(target, base) {
+          function createField(htmlTag) {
+            const elt = document.createElement(htmlTag);
+            elt.value = attrValue;
+            elt.style.boxSizing = "border-box";
+            elt.style.margin = "0";
+            elt.style.padding = "0";
+            elt.style.border = `1px ${attrValue ? "solid":"dashed"} #aaa`;
+            elt.style.backgroundColor = Format.inactiveTabBackgroundColor;
+            elt.style.borderRadius = "0px";
+            elt.style.fontStyle = (attrValue) ? "normal" : "italic";
+            if (htmlTag === "input") {
+              elt.style.width = "50%";
+              elt.type = "text";
+              elt.style.height = "20px";
+              elt.style.float = "right";
+              elt.style.marginLeft = "auto";
+              elt.style.paddingLeft = "2px";
+            }
+            else if (htmlTag === "textarea") {
+              elt.style.width = "100%";
+              elt.rows = 5;
+              elt.style.resize = "vertical";
+              elt.style.display = "none";
+              elt.style.outline = "none";
+            }
             /**
-             * Computes source placeholder depending on
-             * checked node **LIVE_APITYPE** attribute value
-             * @param {Node} elt Current checked node
+             * Handles SOURCE Live Attribute behavior
+             * Disables SOURCE if target has APITYPE Live Attribute
+             * Else displays placeholder of APITYPE stored in root
              */
-            function checkApitype(elt) {
-              if (elt.hasAttribute(LIVE_APITYPE)) {
-                const apiType = live.apitypes.find(
-                  (api) => (api.id === elt.getAttribute(LIVE_APITYPE))
-                );
+            function handleSourceCase() {
+              const isNotRawApiType = elt => elt.getAttribute(LIVE_APITYPE) !== live.apitypeDefault.id;
 
-                if (apiType) {
-                  return `api ${apiType.id} => ${apiType.source || "Function"}`;
-                }
+              if (isNotRawApiType(target)) {
+                const REMINDER = "Source unavailable: " + target.getAttribute(LIVE_APITYPE) + " API Type is set";
+                ["placeholder", "title"].forEach(tagAttr => elt.setAttribute(tagAttr, REMINDER));
+                elt.setAttribute("disabled", true);
+                elt.style.cursor = "not-allowed";
+                customCb.style.backgroundColor = "#ccc";
               }
-              return false;
+              else if (isNotRawApiType(root))
+                elt.setAttribute("placeholder", root.getAttribute(LIVE_APITYPE));
             }
 
-            if (checkApitype(target))
-              return checkApitype(target);
-            else if (checkApitype(base))
-              return checkApitype(base);
-            else if (base.hasAttribute(LIVE_SOURCE))
-              return base.getAttribute(LIVE_SOURCE);
+            if (attrName === LIVE_SOURCE)
+              handleSourceCase();
+            else if (root.hasAttribute(attrName))
+              elt.setAttribute("placeholder", root.getAttribute(attrName));
+            else
+              elt.setAttribute("placeholder", emptyValue);
 
-            return emptyValue;
+            return elt;
           }
-
-          if (attrName === LIVE_APITYPE)
-            elt.placeholder = "raw";
-          else if (attrName === LIVE_SOURCE)
-            elt.placeholder = getSourcePlaceholder(target, base);
-          else if (base.hasAttribute(attrName))
-            elt.placeholder = base.getAttribute(attrName);
-          else
-            elt.placeholder = emptyValue;
-
-          return elt;
-        }
-
-        const shortField = createField("input");
-        const longField = createField("textarea");
-
-        // INPUTS EVENT HANDLERS //
-        function handleKeyDownOnTextInput(e) {
-          if (e.key === "Enter" || e.key === "Escape") {
-            if (e.key === "Escape")
-              longField.value = attrValue;
-            document.activeElement.blur();
-          }
-        }
-
-        function handleFocusoutOfTextInput() {
-          let initialValue = undefined;
-
-          if (type === "property")
-            initialValue = target.getAttribute(attrName) || "";
-
-          if (type === "handler")
-            initialValue = live.handlers.list[labelStr] || "";
-
-          if (initialValue !== longField.value)
-            updateGraph(targetId, type, (type === "handler" ? labelStr : attrName), longField.value);
-
-          longField.style.display = "none";
-          shortField.style.display = "inline";
-        }
-
-        function handleClickOnCheckbox(e) {
-          e.preventDefault();
-          if (!e.target.checked) {
-            const propName = type === "handler" ? labelStr : attrName;
-            if (mxUtils.confirm("Are you sure to remove " + propName + " " + type + " ?")) {
-              updateGraph(targetId, type, propName);
+  
+          const shortField = createField("input");
+          const longField = createField("textarea");
+  
+          // INPUTS EVENT HANDLERS //
+          function handleKeyDownOnTextInput(e) {
+            if (e.key === "Enter" || e.key === "Escape") {
+              if (e.key === "Escape")
+                longField.value = attrValue;
+              document.activeElement.blur();
             }
           }
-          else {
-            shortField.focus();
+  
+          function handleFocusoutOfTextInput() {
+            let initialValue = undefined;
+  
+            if (type === "property")
+              initialValue = target.getAttribute(attrName) || "";
+  
+            if (type === "handler")
+              initialValue = live.handlers.list[labelStr] || "";
+  
+            if (initialValue !== longField.value)
+              updateGraph(targetId, type, (type === "handler" ? labelStr : attrName), longField.value);
+  
+            longField.style.display = "none";
+            shortField.style.display = "inline";
           }
-        }
-
-        function handleFocusOnShortField(e) {
-          e.preventDefault();
-          shortField.style.display = "none";
-          longField.style.display = "block";
-          longField.focus();
-        }
-
-        function handleClickOnLabel(e) {
-          e.preventDefault();
-          if (cb.checked) {
-            const propName = type === "handler" ? labelStr : attrName;
-            if (mxUtils.confirm("Are you sure to remove " + propName + " " + type + " ?")) {
-              cb.checked = !cb.checked;
-              updateGraph(targetId, type, propName);
+  
+          function handleFocusOnShortField(e) {
+            e.preventDefault();
+            shortField.style.display = "none";
+            longField.style.display = "block";
+            longField.focus();
+          }
+  
+          function handleClickOnLabel(e) {
+            e.preventDefault();
+            if (cb.checked) {
+              const propName = type === "handler" ? labelStr : attrName;
+              if (mxUtils.confirm("Are you sure to remove " + propName + " " + type + " ?")) {
+                cb.checked = !cb.checked;
+                updateGraph(targetId, type, propName);
+              }
+            }
+            else {
+              shortField.focus();
             }
           }
-          else {
-            shortField.focus();
-          }
+  
+          mxEvent.addListener(customCb, "click", handleClickOnLabel);
+          mxEvent.addListener(label, "click", handleClickOnLabel);
+          mxEvent.addListener(shortField, "focus", handleFocusOnShortField);
+          mxEvent.addListener(longField, "keydown", handleKeyDownOnTextInput);
+          mxEvent.addListener(longField, "focusout", handleFocusoutOfTextInput);
+  
+          return { cb: customCb, label, longField, shortField };
         }
+        //* Handles APITYPE case
+        else {
+          customCb.style.backgroundColor = "#ccc";
+          let isApiTypeNotSet = true;
+          
+          const select = document.createElement("select");
+          select.style.width = "50%";
+          select.style.height = "20px";
+          select.style.border = "1px solid #aaa";
+          select.style.backgroundColor = Format.inactiveTabBackgroundColor;
+          select.style.marginLeft = "auto";
 
-        mxEvent.addListener(cb, "click", handleClickOnCheckbox);
-        mxEvent.addListener(customCb, "click", handleClickOnLabel);
-        mxEvent.addListener(label, "click", handleClickOnLabel);
-        mxEvent.addListener(shortField, "focus", handleFocusOnShortField);
-        mxEvent.addListener(longField, "keydown", handleKeyDownOnTextInput);
-        mxEvent.addListener(longField, "focusout", handleFocusoutOfTextInput);
+          [live.apitypeDefault, ...live.apitypes].forEach(
+            (apitype) => {
+              const selectOption = document.createElement("option");
+              selectOption.setAttribute("value", apitype.id);
+              selectOption.innerText = apitype.id;
 
-        return { cb: customCb, label, longField, shortField };
+              if (target.hasAttribute(LIVE_APITYPE) && target.getAttribute(LIVE_APITYPE) === apitype.id) {
+                selectOption.setAttribute("selected", true);
+                isApiTypeNotSet = false;
+              }
+              select.append(selectOption);
+            }
+          );
+          
+          if (isApiTypeNotSet)
+            updateGraph(targetId, type, attrName, live.apitypeDefault.id);
+          
+          const handleChangesOnSelect = (e) => updateGraph(targetId, type, attrName, e.target.value);
+          mxEvent.addListener(select, mxEvent.CHANGE, handleChangesOnSelect);
+          return { cb: customCb, label, select };
+        }
       }
 
       /**
@@ -546,33 +552,37 @@
        * @param {Node} targetId Targetted graph node
        */
       function handleSubpanelInputs(container, type, target, inputsList) {
-        for (const input of inputsList) {
-          const [displayedLabel, attributeName] = input;
+        inputsList.forEach(
+          ([displayedLabel, attributeName]) => {
+            const inputSection = document.createElement('section');
+            inputSection.style.padding = '6px 0px 1px 1px';
+            inputSection.style.whiteSpace = 'nowrap';
+            inputSection.style.overflow = 'hidden';
+            inputSection.style.fontWeight = "normal";
+            inputSection.style.display = "flex";
+            inputSection.style.flexWrap = "wrap";
+            inputSection.style.justifyContent = "flex-start";
+            inputSection.style.alignItems = "center";
 
-          const inputSection = document.createElement('section');
-          inputSection.style.padding = '6px 0px 1px 1px';
-          inputSection.style.whiteSpace = 'nowrap';
-          inputSection.style.overflow = 'hidden';
-          inputSection.style.fontWeight = "normal";
-          inputSection.style.display = "flex";
-          inputSection.style.flexWrap = "wrap";
-          inputSection.style.justifyContent = "flex-start";
-          inputSection.style.alignItems = "center";
+            const warning = getWarning(
+              type === "handler" ? "handler" : attributeName,
+              type === "handler" ? displayedLabel : target.getAttribute("id")
+            );
 
-          const warning = getWarning(
-            type === "handler" ? "handler" : attributeName,
-            type === "handler" ? displayedLabel : target.getAttribute("id")
-          );
+            if (warning)
+              inputSection.title = warning;
 
-          if (warning)
-            inputSection.title = warning;
+            const { cb, shortField, longField, label, select } =
+              buildInput(type, displayedLabel, attributeName, target, Boolean(warning));
 
-          const { cb, shortField, longField, label } =
-            buildInput(type, displayedLabel, attributeName, target, Boolean(warning));
+            if (attributeName === LIVE_APITYPE)
+              inputSection.append(cb, label, select);
+            else
+              inputSection.append(cb, label, shortField, longField);
 
-          inputSection.append(cb, label, shortField, longField);
-          container.appendChild(inputSection);
-        }
+            container.appendChild(inputSection);
+          }
+        );
       }
 
       /**
