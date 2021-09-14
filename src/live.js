@@ -251,9 +251,7 @@ Draw.loadPlugin(
          * @param {boolean} isActiveTab True if selected tab is active one
          */
         function setTabStyle(elt, isActiveTab = false) {
-          elt.style.backgroundColor = isActiveTab ? "inherit" : "#f1f3f4";
-          elt.style.borderWidth = "0px";
-          elt.style.borderLeftWidth = "1px";
+          elt.style.backgroundColor = isActiveTab ? "inherit" : Format.inactiveTabBackgroundColor;
           elt.style.borderBottomWidth = isActiveTab ? "0px" : "1px";
         }
 
@@ -402,16 +400,17 @@ Draw.loadPlugin(
           elt.style.boxSizing = "border-box";
           elt.style.margin = "0";
           elt.style.padding = "0";
-          elt.style.border = "1px solid #f1f3f4";
+          elt.style.border = `1px ${attrValue ? "solid":"dashed"} #aaa`;
+          elt.style.backgroundColor = Format.inactiveTabBackgroundColor;
           elt.style.borderRadius = "0px";
           elt.style.fontStyle = (attrValue) ? "normal" : "italic";
-          elt.style.backgroundColor = "white";
           if (htmlTag === "input") {
             elt.style.width = "50%";
             elt.type = "text";
             elt.style.height = "20px";
             elt.style.float = "right";
             elt.style.marginLeft = "auto";
+            elt.style.paddingLeft = "2px";
           }
           else if (htmlTag === "textarea") {
             elt.style.width = "100%";
@@ -674,7 +673,8 @@ Draw.loadPlugin(
           input.style.height = "30px";
           input.style.boxSizing = "border-box";
           input.style.borderRadius = "0px";
-          input.style.border = "1px solid #f1f3f4";
+          input.style.border = "1px solid #aaa";
+          input.style.backgroundColor = Format.inactiveTabBackgroundColor;
           input.style.marginBottom = "10px";
           input.placeholder = getLabel("placeholder") + key;
 
