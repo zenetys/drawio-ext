@@ -376,8 +376,7 @@
         const customCb = document.createElement("span");
         customCb.style.width = "10px";
         customCb.style.height = "10px";
-        customCb.style.margin = "0px";
-        customCb.style.marginRight = "2px";
+        customCb.style.margin = "0px 3px 0px 0px";
         customCb.style.padding = "0px";
         customCb.style.border = "1px solid " + (withWarning ? "#FA0" : "#aaa");
 
@@ -386,6 +385,8 @@
 
         const label = document.createElement("label");
         label.style.textOverflow = "ellipsis";
+        label.style.paddingTop = "3px";
+        label.style.lineHeight = "12px";
         mxUtils.write(label, labelStr + (withWarning ? " ⚠" : ""));
 
         /**
@@ -1489,7 +1490,7 @@
     function log(...text) {
       console.log("liveUpdate plugin:", ...text);
     }
-    
+
     initPlugin();
   }
 );
