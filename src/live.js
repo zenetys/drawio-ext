@@ -46,9 +46,17 @@ Draw.loadPlugin(
         parsed: {},
         separators: { list: "---", pair: ":" }
       },
-      apitypes: [
-      ],
-      apitypeDefault: { id: "raw"},
+      apitypes: {
+        list: [
+        ],
+        raw: { id: "raw" },
+        /**
+         * Checks if a targeted graph node `LIVE_APITYPE` attribute is raw apitype
+         * @param {Node} target Targeted graph node
+         * @returns {boolean} `true` if target `LIVE_APITYPE` attribute is raw apitype
+         */
+        isRaw: target => target.getAttribute(LIVE_APITYPE) === live.apitypes.raw.id,
+      },
       warnings: {},
       property: {
         prefix: "live.property.",
@@ -428,7 +436,7 @@ Draw.loadPlugin(
              * Else displays placeholder of APITYPE stored in root
              */
             function handleSourceCase() {
-              const isNotRawApiType = elt => elt.getAttribute(LIVE_APITYPE) !== live.apitypeDefault.id;
+              const isNotRawApiType = elt => elt.getAttribute(LIVE_APITYPE) !== live.apitypes.raw.id;
 
               if (isNotRawApiType(target)) {
                 const REMINDER = "Source unavailable: " + target.getAttribute(LIVE_APITYPE) + " API Type is set";
@@ -520,7 +528,7 @@ Draw.loadPlugin(
           select.style.backgroundColor = Format.inactiveTabBackgroundColor;
           select.style.marginLeft = "auto";
 
-          [live.apitypeDefault, ...live.apitypes].forEach(
+          [live.apitypes.raw, ...live.apitypes.list].forEach(
             (apitype) => {
               const selectOption = document.createElement("option");
               selectOption.setAttribute("value", apitype.id);
@@ -535,7 +543,7 @@ Draw.loadPlugin(
           );
           
           if (isApiTypeNotSet)
-            updateGraph(targetId, type, attrName, live.apitypeDefault.id);
+            updateGraph(targetId, type, attrName, live.apitypes.raw.id);
           
           const handleChangesOnSelect = (e) => updateGraph(targetId, type, attrName, e.target.value);
           mxEvent.addListener(select, mxEvent.CHANGE, handleChangesOnSelect);
@@ -846,12 +854,15 @@ Draw.loadPlugin(
 
     /**
      * Transforms raw API response to exploitable data depending on source
-     * @param {object} raw Raw received API response
-     * @param {object} computationDataset Required data to compute exploitable data from API raw response
+     * @param {object} raw Requested API raw response
+     * @param {object} dataset Data used to build exploitable output from API raw response
      * @returns computed exploitable data
      */
-    function buildExploitableData(raw, computationDataset = {}) {
-      const {source, post, apitypeId} = computationDataset;
+    function buildExploitableData(raw, dataset = {}) {
+      if (!dataset.post && !dataset.source)
+        return raw;
+
+      const { source, post, id: apitypeId } = dataset;
       const postProcessed = (post) ? post(raw) : raw;
 
       if (post && !postProcessed)
@@ -1066,46 +1077,36 @@ Draw.loadPlugin(
      * or with **LIVE_SOURCE** attributes in object & graph base
      * @param {Node} node Current handled graph node
      * @param {Node} root Graph root node
-     * @returns {object} Object containing data to  Path from or method to
+     * @returns {object|false} Object containing data to  Path from or method to
      * transform corresponding api response in order to get an exploitable object
+     * or `false` if nothing has to be done
      */
     function getDataToFinalizeResponse(node, root) {
       /**
-       * Gets data if "live.apitype" attribute is set in selected node
-       * @param {Node} currentNode Current selected node
-       * @param {string} currentSource Value for "live.source" attribute in currentNode
+       * Gets data if `live.apitype` attribute is set in selected node  
+       * @param {Node} target Current selected node
        * @returns {object} Dataset required to get exploitable data from API response
        */
-      function getFromApitype(currentNode, currentSource) {
-        const apitype = currentNode.getAttribute(LIVE_APITYPE);
-        if (!apitype)
-          return false;
-
-        const targettedApi = live.apitypes.find(api => api.id === apitype);
-        if (!targettedApi) {
+      function getDataFromApitype(target) {
+        const apitypeId = target.getAttribute(LIVE_APITYPE);
+        const targetedApi = live.apitypes.list.find(api => api.id === apitypeId);
+        if (targetedApi)
+          return targetedApi;
+        else {
           setWarning(LIVE_APITYPE, node.getAttribute("id"), "Value set does not match any identified apitype");
           return false;
         }
-
-        return {
-          apitypeId: targettedApi.id,
-          post: targettedApi.post,
-          source: (currentSource) ? currentSource : targettedApi.source
-        };
       }
-      const targetSource = node.getAttribute(LIVE_SOURCE);
-      const baseSource = root.getAttribute(LIVE_SOURCE);
+      const nodeSource = node.getAttribute(LIVE_SOURCE);
 
-      if (getFromApitype(node, targetSource))
-        return getFromApitype(node, targetSource);
-      else if (targetSource)
-        return {source: targetSource};
-      else if (getFromApitype(root, baseSource))
-        return getFromApitype(root, baseSource);
-      else if (baseSource)
-        return {source: baseSource};
-
-      return undefined;
+      if (!live.apitypes.isRaw(node))
+        return getDataFromApitype(node);
+      else if (nodeSource)
+        return { source: nodeSource };
+      else if (!live.apitypes.isRaw(root))
+        return getDataFromApitype(root);
+      else
+        return undefined;
     }
 
     /**
@@ -1411,7 +1412,7 @@ Draw.loadPlugin(
                 const targettedAnonApi = anonApis.find(api => api.url === url);
 
                 if (targettedAnonApi) {
-                  updatedValue = targettedApi.response;
+                  updatedValue = targetedApi.response;
                 }
                 else {
                   const credentials = getCredentials(liveNode.elt, baseNode);
