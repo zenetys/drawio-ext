@@ -136,46 +136,43 @@ Draw.loadPlugin(
 
     /** Launches "Live" feature in webapp */
     function initPlugin() {
-      // Extract from original plugin animation.js
-      // https://github.com/jgraph/drawio/blob/master/src/main/webapp/plugins/animation.js
+      //! Extracted & modified from original plugin animation.js
+      //! https://github.com/jgraph/drawio/blob/master/src/main/webapp/plugins/animation.js
       // Adds resource for action
       mxResources.parse('animation=Animation...');
 
       // Adds action
       ui.actions.addAction('animation', function() {
-        if (this.animationWindow == null) {
-          // FIXME: Check outline window for initial placement
-          this.animationWindow = new AnimationWindow(ui, (document.body.offsetWidth - 480) / 2, 120, 640, 480);
+        if (this.animationWindow === null) {
+          this.animationWindow = new AnimationWindow(ui, (window.innerWidth - 480) / 2, 120, 640, 480);
           this.animationWindow.window.setVisible(true);
         }
-        else {
+        else
           this.animationWindow.window.setVisible(!this.animationWindow.window.isVisible());
-        }
       });
 
       // Autostart in chromeless mode
       if (ui.editor.isChromelessView()) {
         function startAnimation() {
-          var root = ui.editor.graph.getModel().getRoot();
-          var result = false;
+          const root = ui.editor.graph.getModel().getRoot();
+          let result = false;
 
-          if (root.value != null && typeof(root.value) == 'object') {
-            var desc = root.value.getAttribute('animation');
+          if (root.value !== null && typeof(root.value) === 'object') {
+            const desc = root.value.getAttribute('animation');
 
-            if (desc != null) {
+            if (desc !== null) {
               run(ui.editor.graph, desc.split('\n'), true);
               result = true;
             }
           }
-
           return result;
         } // startAnimation()
 
         // Wait for file to be loaded if no animation data is present
-        if (!startAnimation()) {
+        if (!startAnimation())
           ui.editor.addListener('fileLoaded', startScheduleUpdate);
-        }
       }
+      //! End of extracted code
       else {
         ui.format.showCloseButton = false;
         ui.editor.addListener("fileLoaded", function(e) {
