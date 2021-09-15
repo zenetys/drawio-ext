@@ -880,30 +880,28 @@
 
     /**
      * Updates live status buttons in Live Palette according to current working status
-     * @param {boolean} newStatus Plugin current working status
+     * @param {boolean} isRunningStatus Plugin current working status
      * @param {boolean} isInit True in case of palette init
      */
-    function updateLivePalette(newStatus = true, isInit = false) {
+     function updateLivePalette(isRunningStatus = true, isInit = false) {
+      //! Do not run if not initialized
       if (!ui.isLivePluginEnabled)
         return;
+    
+      live.isRunning = isRunningStatus;
+      const buttons = [live.paletteButtons[live.isRunning ? "pause" : "start"]];
 
-      if(!isInit) {
+      if (isInit)
+        buttons.unshift(live.paletteButtons.reload);
+      else
         ui.toolbar.container.removeChild(ui.toolbar.container.lastChild);
-        ui.toolbar.container.removeChild(ui.toolbar.container.lastChild);
-      }
-
-      live.isRunning = newStatus;
-      const buttons = [
-        live.paletteButtons[live.isRunning ? "pause" : "start"],
-        live.paletteButtons.reload
-      ];
-
+    
       buttons.forEach(
         ([label, tooltip, funct]) => ui.toolbar.addMenuFunction(
-          label, 
-          tooltip, 
-          true, 
-          funct, 
+          label,
+          tooltip,
+          true,
+          funct,
           ui.toolbar.container
         )
       );
