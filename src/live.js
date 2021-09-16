@@ -128,8 +128,8 @@
         LIVE_STYLE,     // graph node's style
         LIVE_TEXT,      // graph node's text
         LIVE_TOOLTIP,   // graph node's tooltip
-        LIVE_DATA,      // Graph node API
-        LIVE_SOURCE,    // path from received API response to get source object (autoset if LIVE_APITYPE is set)
+        LIVE_DATA,      // Graph node's API url
+        LIVE_SOURCE,    // path from received API raw response to get exploitable object (autoset if LIVE_APITYPE is set)
         LIVE_REF,       // Reference associated with API stored in graph object LIVE_SOURCE
         LIVE_HANDLERS,  // Array containing user defined methods stored in graph root node
       ],
@@ -375,7 +375,6 @@
          * @param {boolean} isHandler Selects if inputs are for live attrs or handlers
          */
         function handleSubpanelInputs(inputsList, isHandler = false) {
-
           /**
            * Builds an input section in the Live format panel
            * @param {string} displayedLabel Text displayed in input field: attribute parsed name or handler name
@@ -616,6 +615,7 @@
               ["API ID", LIVE_REF],
               ["Style", LIVE_STYLE],
               ["Text", LIVE_TEXT],
+              ["Tooltip", LIVE_TOOLTIP],
             ],
             /** Inputs always displayed */
             both: [
