@@ -250,6 +250,8 @@
         function setTabStyle(elt, isActiveTab = false) {
           elt.style.backgroundColor = isActiveTab ? "inherit" : Format.inactiveTabBackgroundColor;
           elt.style.borderBottomWidth = isActiveTab ? "0px" : "1px";
+          if (isActiveTab && !ui.editor.graph.isSelectionEmpty())
+            elt.style.borderLeftWidth = "1px";
         }
 
         const liveTab = formatTabs.firstChild.cloneNode(false);
