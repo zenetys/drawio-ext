@@ -695,9 +695,9 @@
           }
           else {
             if (nameFieldIsEmpty)
-              log(getLabel("error") + "name !");
+              log("%c" + getLabel("error") + "name !");
             if (valueFieldIsEmpty)
-              log(getLabel("error") + "value !");
+              log("%c" + getLabel("error") + "value !");
           }
         }
 
@@ -751,7 +751,7 @@
       const graphXml = ui.editor.getGraphXml();
       const target = mxUtils.findNode(graphXml, "id", targetId);
       const msg = {
-        prop: type === "property" ? "Property " + name + " " : "Handlers updated: "
+        prop: type === "property" ? "%cProperty " + name + " " : "Handlers updated:%c"
       };
 
       if (type === "property") {
@@ -900,7 +900,7 @@
     /** Single update */
     function singleUpdate() {
       if (live.thread !== null) {
-        log("live thread already running - thread id:", live.thread);
+        log("live thread already running%c- thread id: " + live.thread);
         return;
       }
       loadUpdatesData();
@@ -916,7 +916,7 @@
     /** Starts update process */
     function startScheduleUpdate() {
        if (live.thread !== null) {
-        log("live thread already running - thread id:", live.thread);
+        log("live thread already running%c- thread id: " + live.thread);
         return;
       }
       updateLivePalette(true);
@@ -1468,12 +1468,21 @@
           delete live.warnings[attribute][objectId];
       }
       else {
-        if(!live.warnings[attribute])
+        if (!live.warnings[attribute])
           live.warnings[attribute] = {};
-        if(!live.warnings[attribute][objectId])
+        if (!live.warnings[attribute][objectId])
           live.warnings[attribute][objectId] = [];
-        if(!live.warnings[attribute][objectId].some(warn => warn === message)) 
+        if (!live.warnings[attribute][objectId].some(warn => warn === message)) {
           live.warnings[attribute][objectId].push(message);
+
+          let introMsg = "Warning on ";
+          if(attribute === "handler")
+            introMsg += "'" + objectId + "'" + " handler:";
+          else
+            introMsg += attribute + " in object " + objectId + ":";
+
+          log(introMsg + "%c", message);
+        }
       }
     }
 
@@ -1501,7 +1510,11 @@
     }
 
     function log(...text) {
-      console.log("liveUpdate plugin:", ...text);
+      console.log(
+        "%cLive Update plugin%c\n  " + [...text].join(""), 
+        "text-decoration: underline dotted",
+        "font-weight: bold",
+      );
     }
 
     initPlugin();
