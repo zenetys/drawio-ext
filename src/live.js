@@ -621,12 +621,12 @@ Draw.loadPlugin(
             ],
             /** Inputs always displayed */
             both: [
-              ["API", LIVE_API],
+              ["API URL", LIVE_API],
               ["API Key", LIVE_APIKEY],
               ["Username", LIVE_USERNAME],
               ["Password", LIVE_PASSWORD],
               ["API Type", LIVE_APITYPE],
-              ["Source", LIVE_SOURCE],
+              ["Raw Path", LIVE_SOURCE],
             ]
           };
 
