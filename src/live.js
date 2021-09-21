@@ -264,7 +264,7 @@
         function setTabStyle(elt, isActiveTab = false) {
           elt.style.backgroundColor = isActiveTab ? "inherit" : Format.inactiveTabBackgroundColor;
           elt.style.borderBottomWidth = isActiveTab ? "0px" : "1px";
-          if (isActiveTab && !ui.editor.graph.isSelectionEmpty())
+          if (!ui.editor.graph.isSelectionEmpty())
             elt.style.borderLeftWidth = "1px";
         }
 
@@ -463,7 +463,7 @@
                 elt.style.margin = "0";
                 elt.style.padding = "0";
                 elt.style.border = `1px ${inputValue ? "solid":"dashed"} #aaa`;
-                elt.style.backgroundColor = Format.inactiveTabBackgroundColor;
+                elt.style.backgroundColor = htmlTag === "textarea" ? "inherit":Format.inactiveTabBackgroundColor;
                 elt.style.borderRadius = "0px";
                 elt.style.fontStyle = (inputValue) ? "normal" : "italic";
                 if (htmlTag === "input") {
