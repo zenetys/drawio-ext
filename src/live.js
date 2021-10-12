@@ -83,8 +83,9 @@ Draw.loadPlugin(
        * @returns {boolean} True if attribute is an available live one
        */
       isAvailableLiveAttribute: (attribute) => {
-        if (!live.isLiveAttribute(attribute))
+        if (!live.isLiveAttribute(attribute)) {
           return false;
+        }
         else {
           for (const unavailableLiveAttribute of live.unavailables) {
             if (attribute === unavailableLiveAttribute)
@@ -804,7 +805,8 @@ Draw.loadPlugin(
     }
 
     function storeHandlers(rebuild = false, computed = false) {
-      if (!rebuild && Object.keys(live.handlers.list).length > 0) return live.handlers.list;
+      if (!rebuild && Object.keys(live.handlers.list).length > 0)
+        return live.handlers.list;
 
       if (computed) {
         live.handlers.list = computed;
@@ -819,7 +821,7 @@ Draw.loadPlugin(
 
         if (handlersStr) {
           /** Parses input string to work in handlers object */
-          handlersStr.split(sep.list).forEach(pair => {
+          handlersStr.split(sep.list).forEach((pair) => {
             const limit = pair.indexOf(sep.pair);
             const key = pair.slice(0, limit);
             const handler = pair.slice(limit + 1);
@@ -963,7 +965,7 @@ Draw.loadPlugin(
     function getCredentials(node, root) {
       const credentials = {};
       for(const crd of live.credentials) {
-        if(node.getAttribute(crd))
+        if (node.getAttribute(crd))
           credentials[crd.slice(5)] = node.getAttribute(crd);
         else
           credentials[crd.slice(5)] = root.getAttribute(crd);
@@ -1116,14 +1118,12 @@ Draw.loadPlugin(
       }
       else if (attrName === LIVE_STYLE) {
         updateNode.setAttribute("style", attrValue);
-      }
       else {
         // Checks if style has already been updated by another attribute
         let currentStyle = undefined;
-        if (updateNode.hasAttribute("style")) {
+        if (updateNode.hasAttribute("style"))
           currentStyle = updateNode.getAttribute("style");
-        }
-        else {
+        else
           currentStyle = initialTargetStyle;
         }
         const updatedStyle = mxUtils.setStyle(
@@ -1434,7 +1434,7 @@ Draw.loadPlugin(
       ui.updateDiagram(mxUtils.getXml(xmlUpdatesDoc));
 
       /** Upgrades unwrapped graph live nodes */
-      live.nodes.forEach(liveNode => {
+      live.nodes.forEach((liveNode) => {
         if (liveNode.isCell) {
           upgradeCellLiveNode(liveNode.id);
           delete liveNode.isCell;
