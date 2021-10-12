@@ -952,22 +952,21 @@ Draw.loadPlugin(
       live.timeout = (+(baseNode.getAttribute(LIVE_REFRESH) + "000")) || 10000;
       live.nodes = findLiveNodes(graphXml);
     }
-
     /**
      * Gets credentials to perform requests to a distant api requiring authentication.
-     * Use live base credentials data if url is prefixed by base's **LIVE_API** attribute,
+     * Use live root credentials data if url is prefixed by base's **LIVE_API** attribute,
      * otherwise use targetted graph node live attributes
-     * @param {Node} target Targetted graph node
-     * @param {Node} base Graph node with id = 0
+     * @param {Node} node Targetted graph node
+     * @param {Node} root Graph node with id = 0
      * @returns {object|undefined} credentials if exist or "undefined"
      */
-    function getCredentials(target, base) {
+    function getCredentials(node, root) {
       const credentials = {};
-      for (const crd of live.credentials) {
-        if (target.getAttribute(crd))
-          credentials[crd.slice(5)] = target.getAttribute(crd);
+      for(const crd of live.credentials) {
+        if(node.getAttribute(crd))
+          credentials[crd.slice(5)] = node.getAttribute(crd);
         else
-          credentials[crd.slice(5)] = base.getAttribute(crd);
+          credentials[crd.slice(5)] = root.getAttribute(crd);
       }
       return (credentials.username || credentials.apikey) ? credentials : undefined;
     }
@@ -975,13 +974,13 @@ Draw.loadPlugin(
     /**
      * Computes the url to request the corresponding API
      * @param {string} url Value stored in live attribute
-     * @param {Node} target Targetted graph object
-     * @param {Node} base Graph base node
+     * @param {Node} node Targetted graph object
+     * @param {Node} root Graph root node
      * @returns {string} The computed request url
      */
-    function buildUrl(url, target, base) {
-      const targetApi = target.getAttribute(LIVE_API);
-      const baseApi = base.getAttribute(LIVE_API);
+    function buildUrl(url, node, root) {
+      const nodeApi = node.getAttribute(LIVE_API);
+      const rootApi = root.getAttribute(LIVE_API);
       let request = "";
 
       if (url) {
@@ -989,20 +988,20 @@ Draw.loadPlugin(
           request = url;
         else if (url.startsWith("https://"))
           request = url;
-        else if (url.startsWith("/") && targetApi)
-          request = targetApi + url;
-        else if (url.startsWith("/") && baseApi)
-          request = baseApi + url;
+        else if (url.startsWith("/") && nodeApi)
+          request = nodeApi + url;
+        else if (url.startsWith("/") && rootApi)
+          request = rootApi + url;
         else if (url.startsWith("/"))
           request = url;
         else
           request = null;
       }
       else {
-        if (targetApi)
-          request = targetApi;
-        else if (baseApi)
-          request = baseApi;
+        if (nodeApi)
+          request = nodeApi;
+        else if (rootApi)
+          request = rootApi;
         else
           request = null;
       }
@@ -1056,15 +1055,15 @@ Draw.loadPlugin(
     }
 
     /**
-     * Adds to the graph object update node the
      * Computes path to access data from request response depending on stored
      * apitypes targetted with its id stored in **LIVE_APITYPE** attributes,
      * or with **LIVE_SOURCE** attributes in object & graph base
-     * @param {Node} target Current handled graph node
-     * @param {Node} base Graph base node
-     * @returns {object} Object containing data to  Path from or method to transform corresponding api response in order to get an exploitable object
+     * @param {Node} node Current handled graph node
+     * @param {Node} root Graph root node
+     * @returns {object} Object containing data to  Path from or method to
+     * transform corresponding api response in order to get an exploitable object
      */
-    function getDataToFinalizeResponse(target, base) {
+    function getDataToFinalizeResponse(node, root) {
       /**
        * Gets data if "live.apitype" attribute is set in selected node
        * @param {Node} currentNode Current selected node
@@ -1078,7 +1077,7 @@ Draw.loadPlugin(
 
         const targettedApi = live.apitypes.find(api => api.id === apitype);
         if (!targettedApi) {
-          setWarning(LIVE_APITYPE, target.getAttribute("id"), "Value set does not match any identified apitype");
+          setWarning(LIVE_APITYPE, node.getAttribute("id"), "Value set does not match any identified apitype");
           return false;
         }
 
@@ -1088,15 +1087,15 @@ Draw.loadPlugin(
           source: (currentSource) ? currentSource : targettedApi.source
         };
       }
-      const targetSource = target.getAttribute(LIVE_SOURCE);
-      const baseSource = base.getAttribute(LIVE_SOURCE);
+      const targetSource = node.getAttribute(LIVE_SOURCE);
+      const baseSource = root.getAttribute(LIVE_SOURCE);
 
-      if (getFromApitype(target, targetSource))
-        return getFromApitype(target, targetSource);
+      if (getFromApitype(node, targetSource))
+        return getFromApitype(node, targetSource);
       else if (targetSource)
         return {source: targetSource};
-      else if (getFromApitype(base, baseSource))
-        return getFromApitype(base, baseSource);
+      else if (getFromApitype(root, baseSource))
+        return getFromApitype(root, baseSource);
       else if (baseSource)
         return {source: baseSource};
 
@@ -1173,10 +1172,7 @@ Draw.loadPlugin(
             ["Authorization", authorization]
           ];
 
-          for (const header of headers) {
-            const [name, value] = header;
-            xhr.setRequestHeader(name, value);
-          }
+          headers.forEach(([name, value]) => xhr.setRequestHeader(name, value));
 
           xhr.onreadystatechange = function() {
             if (xhr.readyState === 4) {
@@ -1256,12 +1252,11 @@ Draw.loadPlugin(
           ...args,
           `${instructions.startsWith("{") ? "" : "return "}${instructions}`
         );
-      }
-      catch(e) {
+      } catch(e) {
         throw Error(
           "Given string cannot be parsed to an available function. " +
           "You should make sure that it is properly written."
-        )
+        );
       }
     }
 
@@ -1274,13 +1269,13 @@ Draw.loadPlugin(
     function getHandlersMethods() {
       const handlers = {};
       Object.keys(live.handlers.list).forEach(
-        key => {
+        (handlerKey) => {
           try {
-            handlers[key] = parseStringHandler(live.handlers.list[key]);
-            setWarning("handler", key);
+            handlers[handlerKey] = parseStringHandler(live.handlers.list[handlerKey]);
+            setWarning("handler", handlerKey);
           }
           catch(e) {
-            setWarning("handler", key, e.message);
+            setWarning("handler", handlerKey, e.message);
           }
         }
       );
@@ -1357,24 +1352,26 @@ Draw.loadPlugin(
         try {
           /** Builds dataset (url, credentials, sources) to perform the request */
           const url = buildUrl(apiData, liveNode, baseNode);
-          let parsedResponse = undefined;
+          let exploitableResponse = undefined;
           const isAlreadyComputed = namedApis.find(api => api.url === url);
 
           /**
            * Checks if corresponding url response is already 
            * computed in order to prevent multi calls on same API 
            */
-          if (isAlreadyComputed) {
-            parsedResponse = isAlreadyComputed.response;
-          }
+          if (isAlreadyComputed)
+            exploitableResponse = isAlreadyComputed.response;
           else {
             const credentials = getCredentials(liveNode, baseNode);
             const rawResponse = computeApiResponse(url, false, credentials);
             const dataset = getDataToFinalizeResponse(liveNode, baseNode);
-            parsedResponse = buildExploitableData(rawResponse, dataset);
+            exploitableResponse = buildExploitableData(rawResponse, dataset);
           }
-          
-          namedApis.push({ response: parsedResponse, ref: apiRef || id, url });
+          namedApis.push({
+            response: exploitableResponse,
+            ref: apiRef || id,
+            url
+          });
         }
         catch(e) {
           setWarning(LIVE_DATA, id, e.message);
@@ -1453,9 +1450,8 @@ Draw.loadPlugin(
      */
     function setWarning(attribute, objectId, message = undefined) {
       if (message === undefined) {
-        if (live.warnings[attribute] && live.warnings[attribute][objectId]) {
+        if (live.warnings[attribute] && live.warnings[attribute][objectId])
           delete live.warnings[attribute][objectId];
-        }
       }
       else {
         if (!live.warnings[attribute])
@@ -1471,14 +1467,14 @@ Draw.loadPlugin(
      * Searches in live.warnings if the live attribute of a graph object has a saved warning
      * In handlers case, objectId === handler name
      * @param {string} attribute Targetted live attribute | "handler"
-     * @param {string|} objectId Targetted graph object id | handler name
+     * @param {string|} nodeId Targetted graph object id | handler name
      * @returns {string} object attribute's corresponding id or an empty string
      */
-    function getWarning(attribute, objectId) {
-      if (!live.warnings[attribute])
+    function getWarning(attribute, nodeId) {
+      if (!live.warnings[attribute] || !live.warnings[attribute][nodeId])
         return "";
       else
-        return live.warnings[attribute][objectId].join("\n") || "";
+        return live.warnings[attribute][nodeId].join("\n");
     }
 
     function clearWarnings() {
