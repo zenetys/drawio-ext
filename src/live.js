@@ -1116,7 +1116,7 @@ Draw.loadPlugin(
       if (attrName === LIVE_TEXT) {
         updateNode.setAttribute("value", `<object label="${attrValue}"/>`);
       }
-      else if (attrName === LIVE_STYLE) {
+      else if (attrName === LIVE_STYLE)
         updateNode.setAttribute("style", attrValue);
       else {
         // Checks if style has already been updated by another attribute
@@ -1125,7 +1125,7 @@ Draw.loadPlugin(
           currentStyle = updateNode.getAttribute("style");
         else
           currentStyle = initialTargetStyle;
-        }
+        
         const updatedStyle = mxUtils.setStyle(
           currentStyle,
           live.property.getName(attrName),
