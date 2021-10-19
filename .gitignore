@@ -1,1 +1,10 @@
+*~
+*.swp
+*.tgz
+*.tar.gz
+*.zip
+*.log
+build/
+dist/
+.DS_Store
 _dev
