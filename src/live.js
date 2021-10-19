@@ -30,6 +30,7 @@
     const LIVE_REFRESH = "live.refresh";
     const LIVE_STYLE = "live.style";
     const LIVE_TEXT = "live.text";
+    const LIVE_TOOLTIP = "live.tooltip";
     const LIVE_DATA = "live.data";
     const LIVE_SOURCE = "live.source";
     const LIVE_REF = "live.id";
@@ -112,6 +113,7 @@
         LIVE_REFRESH,   // time between 2 API calls in seconds
         LIVE_STYLE,     // graph node's style
         LIVE_TEXT,      // graph node's text
+        LIVE_TOOLTIP,   // graph node's tooltip
         LIVE_DATA,      // Graph node API
         LIVE_SOURCE,    // path from received API response to get source object (autoset if LIVE_APITYPE is set)
         LIVE_REF,       // Reference associated with API stored in graph object LIVE_SOURCE
@@ -601,6 +603,7 @@
             ["Object", LIVE_DATA],
             ["API ID", LIVE_REF],
             ["Text", LIVE_TEXT],
+            ["Tooltip", LIVE_TOOLTIP],
             ["Style", LIVE_STYLE],
           ];
 
@@ -1097,8 +1100,23 @@
      * @param {string} initialTargetStyle Targetted graph node style before update
      */
     function fillUpdateNode(updateNode, attrName, attrValue, initialTargetStyle) {
-      if (attrName === LIVE_TEXT)
-        updateNode.setAttribute("value", `<object label="${attrValue}"/>`);
+      /**
+       * Set updates for Text & Tooltip Live Attributes
+       * @param {boolean} isText `true` if current live attribute is Text
+       * @returns The updated value
+       */
+      function setTextUpdates(isText) {
+        const updatedValue = `${isText ? "label":"tooltip"}="${attrValue}" />`;
+        const previousValue = updateNode.getAttribute("value");
+
+        if (previousValue)
+          updateNode.setAttribute("value", previousValue.replace("/>", updatedValue));
+        else
+          updateNode.setAttribute("value", `<object ${updatedValue}`);
+      }
+
+      if ([LIVE_TEXT, LIVE_TOOLTIP].includes(attrName))
+        setTextUpdates(attrName === LIVE_TEXT);
       else if (attrName === LIVE_STYLE)
         updateNode.setAttribute("style", attrValue);
       else {
