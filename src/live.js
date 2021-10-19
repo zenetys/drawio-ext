@@ -48,8 +48,6 @@
         separators: { list: "---", pair: ":" }
       },
       apitypes: [
-        { id: "elastic", source: "hits.hits[0]._source" },
-        { id: "hastat", post: hastatBuildObject },
       ],
       warnings: {},
       property: {
@@ -1201,24 +1199,8 @@
     }
     
     /**
-     * Builds a valid object from a broken API response
-     * @param {JSON} json Invalid API received response
-     * @returns rebuilt object
-     */
-    function hastatBuildObject(json) {
-      const output = [];
-      for (const e1 of json) {
-        const t = [];
-        for (const e2 of e1) t[e2.field.name] = e2.value.value;
-        if(!output[t["pxname"]]) output[t["pxname"]] = [];
-        output[t["pxname"]][t["svname"]] = t;
-      }
-      return output;
-    }
-
-    /**
-     * Handles case of mxCell containing live attributes without a parent object.  
-     * Moves live attributes from containing mxCell to its \<userObject> parent created by update process 
+     * Handles case of mxCell containing live attributes without a parent object.
+     * Moves live attributes from containing mxCell to its \<userObject> parent created by update process
      * @param {string} cellId Live cell's
      */
     function upgradeCellLiveNode(cellId) {
