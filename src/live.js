@@ -1,26 +1,26 @@
 /**
  * Live Update plugin.
- *
+ * 
  * Allows you to update separately each selected graph element.
  * Use live attributes to configure the plugin.
- *
+ * 
  * In the metadata of the diagram (graph element with id = 0)
  *    - LIVE_API: url prefix to request the distant API (optional, see below).
- *    - LIVE_REFRESH: interval between 2 updates, set in seconds (optional,
+ *    - LIVE_REFRESH: interval between 2 updates, set in seconds (optional, 
  *      default is 10s).
- *
- * In the graph objects properties (right click > "Edit Data" or
+ * 
+ * In the graph objects properties (right click > "Edit Data" or 
  * CTRL+M):
  *    - LIVE_DATA: calls a complex API (returning an object)
  *    - LIVE_TEXT: updates element text node.
  *    - LIVE_STYLE: updates element style.
  *    - live.property.<PROPERTY_NAME>: updates element <PROPERTY_NAME> value.
- *        Example: "live.property.fillOpacity" updates "Fill Opacity" element
+ *        Example: "live.property.fillOpacity" updates "Fill Opacity" element 
  *        property.
- *
+ * 
  * See documentation for more details.
  */
-Draw.loadPlugin(
+ Draw.loadPlugin(
   function(ui) {
     const LIVE_USERNAME = "live.username";
     const LIVE_APIKEY = "live.apikey";
@@ -30,6 +30,7 @@ Draw.loadPlugin(
     const LIVE_REFRESH = "live.refresh";
     const LIVE_STYLE = "live.style";
     const LIVE_TEXT = "live.text";
+    const LIVE_TOOLTIP = "live.tooltip";
     const LIVE_DATA = "live.data";
     const LIVE_SOURCE = "live.source";
     const LIVE_REF = "live.id";
@@ -52,7 +53,7 @@ Draw.loadPlugin(
       property: {
         prefix: "live.property.",
         getName: (fullPropName) => fullPropName.slice(live.property.prefix.length)
-      },
+      },      
       /**
        * Checks if targetted live attribute handles an anonymous api
        * receiving the updates value or if it contains js instructions
@@ -83,13 +84,10 @@ Draw.loadPlugin(
        * @returns {boolean} True if attribute is an available live one
        */
       isAvailableLiveAttribute: (attribute) => {
-        if (!live.isLiveAttribute(attribute)) {
-          return false;
-        }
+        if(!live.isLiveAttribute(attribute)) return false;
         else {
-          for (const unavailableLiveAttribute of live.unavailables) {
-            if (attribute === unavailableLiveAttribute)
-              return false;
+          for(const unavailableLiveAttribute of live.unavailables) {
+            if(attribute === unavailableLiveAttribute) return false;
           }
           return true;
         }
@@ -113,6 +111,7 @@ Draw.loadPlugin(
         LIVE_REFRESH,   // time between 2 API calls in seconds
         LIVE_STYLE,     // graph node's style
         LIVE_TEXT,      // graph node's text
+        LIVE_TOOLTIP,   // graph node's tooltip
         LIVE_DATA,      // Graph node API
         LIVE_SOURCE,    // path from received API response to get source object (autoset if LIVE_APITYPE is set)
         LIVE_REF,       // Reference associated with API stored in graph object LIVE_SOURCE
@@ -120,14 +119,14 @@ Draw.loadPlugin(
       ],
       credentials: [LIVE_USERNAME, LIVE_PASSWORD, LIVE_APIKEY],
       unavailables: [
+        LIVE_API,
+        LIVE_REFRESH,
         LIVE_USERNAME,
         LIVE_APIKEY,
         LIVE_PASSWORD,
-        LIVE_API,
-        LIVE_APITYPE,
-        LIVE_REFRESH,
         LIVE_DATA,
         LIVE_SOURCE,
+        LIVE_APITYPE,
         LIVE_REF,
         LIVE_HANDLERS,
       ]
@@ -135,46 +134,43 @@ Draw.loadPlugin(
 
     /** Launches "Live" feature in webapp */
     function initPlugin() {
-      // Extract from original plugin animation.js
-      // https://github.com/jgraph/drawio/blob/master/src/main/webapp/plugins/animation.js
+      //! Extracted & modified from original plugin animation.js
+      //! https://github.com/jgraph/drawio/blob/master/src/main/webapp/plugins/animation.js
       // Adds resource for action
       mxResources.parse('animation=Animation...');
 
       // Adds action
       ui.actions.addAction('animation', function() {
-        if (this.animationWindow == null) {
-          // FIXME: Check outline window for initial placement
-          this.animationWindow = new AnimationWindow(ui, (document.body.offsetWidth - 480) / 2, 120, 640, 480);
+        if (this.animationWindow === null) {
+          this.animationWindow = new AnimationWindow(ui, (window.innerWidth - 480) / 2, 120, 640, 480);
           this.animationWindow.window.setVisible(true);
         }
-        else {
+        else
           this.animationWindow.window.setVisible(!this.animationWindow.window.isVisible());
-        }
       });
 
       // Autostart in chromeless mode
       if (ui.editor.isChromelessView()) {
         function startAnimation() {
-          var root = ui.editor.graph.getModel().getRoot();
-          var result = false;
+          const root = ui.editor.graph.getModel().getRoot();
+          let result = false;
 
-          if (root.value != null && typeof(root.value) == 'object') {
-            var desc = root.value.getAttribute('animation');
+          if (root.value !== null && typeof(root.value) === 'object') {
+            const desc = root.value.getAttribute('animation');
 
-            if (desc != null) {
+            if (desc !== null) {
               run(ui.editor.graph, desc.split('\n'), true);
               result = true;
             }
           }
-
           return result;
         } // startAnimation()
 
         // Wait for file to be loaded if no animation data is present
-        if (!startAnimation()) {
+        if (!startAnimation())
           ui.editor.addListener('fileLoaded', startScheduleUpdate);
-        }
       }
+      //! End of extracted code
       else {
         ui.format.showCloseButton = false;
         ui.editor.addListener("fileLoaded", function(e) {
@@ -214,9 +210,8 @@ Draw.loadPlugin(
 
     /** Adds a new palette with buttons to handle the live feature state in the toolbar */
     function addLiveUpdatePalette() {
-      if (!ui.toolbar) {
+      if(!ui.toolbar)
         log("Toolbar doesn't exist. Plugin is inactive...")
-      }
       else {
         ui.toolbar.addSeparator();
         updateLivePalette(false, true);
@@ -251,10 +246,10 @@ Draw.loadPlugin(
          * @param {boolean} isActiveTab True if selected tab is active one
          */
         function setTabStyle(elt, isActiveTab = false) {
-          elt.style.backgroundColor = isActiveTab ? "inherit" : "#f1f3f4";
-          elt.style.borderWidth = "0px";
-          elt.style.borderLeftWidth = "1px";
+          elt.style.backgroundColor = isActiveTab ? "inherit" : Format.inactiveTabBackgroundColor;
           elt.style.borderBottomWidth = isActiveTab ? "0px" : "1px";
+          if (isActiveTab && !ui.editor.graph.isSelectionEmpty())
+            elt.style.borderLeftWidth = "1px";
         }
 
         const liveTab = formatTabs.firstChild.cloneNode(false);
@@ -321,7 +316,7 @@ Draw.loadPlugin(
       const formatRefreshBasicFunc = ui.format.immediateRefresh;
       ui.format.immediateRefresh = function() {
         mxUtils.bind(ui.format, formatRefreshBasicFunc)();
-        if (!ui.editor.graph.isEditing())
+        if(!ui.editor.graph.isEditing()) 
           addLiveTabToFormatPanel();
       }
     }
@@ -378,8 +373,7 @@ Draw.loadPlugin(
         const customCb = document.createElement("span");
         customCb.style.width = "10px";
         customCb.style.height = "10px";
-        customCb.style.margin = "0px";
-        customCb.style.marginRight = "2px";
+        customCb.style.margin = "0px 3px 0px 0px";
         customCb.style.padding = "0px";
         customCb.style.border = "1px solid " + (withWarning ? "#FA0" : "#aaa");
 
@@ -388,6 +382,8 @@ Draw.loadPlugin(
 
         const label = document.createElement("label");
         label.style.textOverflow = "ellipsis";
+        label.style.paddingTop = "3px";
+        label.style.lineHeight = "12px";
         mxUtils.write(label, labelStr + (withWarning ? " ⚠" : ""));
 
         /**
@@ -401,16 +397,17 @@ Draw.loadPlugin(
           elt.style.boxSizing = "border-box";
           elt.style.margin = "0";
           elt.style.padding = "0";
-          elt.style.border = "1px solid #f1f3f4";
+          elt.style.border = `1px ${attrValue ? "solid":"dashed"} #aaa`;
+          elt.style.backgroundColor = Format.inactiveTabBackgroundColor;
           elt.style.borderRadius = "0px";
           elt.style.fontStyle = (attrValue) ? "normal" : "italic";
-          elt.style.backgroundColor = "white";
           if (htmlTag === "input") {
             elt.style.width = "50%";
             elt.type = "text";
             elt.style.height = "20px";
             elt.style.float = "right";
             elt.style.marginLeft = "auto";
+            elt.style.paddingLeft = "2px";
           }
           else if (htmlTag === "textarea") {
             elt.style.width = "100%";
@@ -606,6 +603,7 @@ Draw.loadPlugin(
             ["Object", LIVE_DATA],
             ["API ID", LIVE_REF],
             ["Text", LIVE_TEXT],
+            ["Tooltip", LIVE_TOOLTIP],
             ["Style", LIVE_STYLE],
           ];
 
@@ -673,7 +671,8 @@ Draw.loadPlugin(
           input.style.height = "30px";
           input.style.boxSizing = "border-box";
           input.style.borderRadius = "0px";
-          input.style.border = "1px solid #f1f3f4";
+          input.style.border = "1px solid #aaa";
+          input.style.backgroundColor = Format.inactiveTabBackgroundColor;
           input.style.marginBottom = "10px";
           input.placeholder = getLabel("placeholder") + key;
 
@@ -696,9 +695,9 @@ Draw.loadPlugin(
           }
           else {
             if (nameFieldIsEmpty)
-              log(getLabel("error") + "name !");
+              log("%c" + getLabel("error") + "name !");
             if (valueFieldIsEmpty)
-              log(getLabel("error") + "value !");
+              log("%c" + getLabel("error") + "value !");
           }
         }
 
@@ -752,7 +751,7 @@ Draw.loadPlugin(
       const graphXml = ui.editor.getGraphXml();
       const target = mxUtils.findNode(graphXml, "id", targetId);
       const msg = {
-        prop: type === "property" ? "Property " + name + " " : "Handlers updated: "
+        prop: type === "property" ? "%cProperty " + name + " " : "Handlers updated:%c"
       };
 
       if (type === "property") {
@@ -801,36 +800,37 @@ Draw.loadPlugin(
 
       if (type === "handler")
         log(msg.prop + name + msg.action);
-
     }
 
     function storeHandlers(rebuild = false, computed = false) {
-      if (!rebuild && Object.keys(live.handlers.list).length > 0)
+      if (!rebuild && Object.keys(live.handlers.list).length > 0) 
         return live.handlers.list;
 
       if (computed) {
         live.handlers.list = computed;
         getHandlersMethods();
-      }
+      } 
       else {
         const graphXml = ui.editor.getGraphXml();
         const root = mxUtils.findNode(graphXml, "id", live.pageBaseId);
         const handlersStr = root.getAttribute(LIVE_HANDLERS);
         const sep = live.handlers.separators;
         const handlers = {};
-
-        if (handlersStr) {
+  
+        if(handlersStr) {
           /** Parses input string to work in handlers object */
-          handlersStr.split(sep.list).forEach((pair) => {
-            const limit = pair.indexOf(sep.pair);
-            const key = pair.slice(0, limit);
-            const handler = pair.slice(limit + 1);
-            handlers[key] = handler;
-          });
+          handlersStr.split(sep.list).forEach(
+            (pair) => {
+              const limit = pair.indexOf(sep.pair);
+              const key = pair.slice(0, limit);
+              const handler = pair.slice(limit + 1);
+              handlers[key] = handler;
+            }
+          );
           live.handlers.list = handlers;
           getHandlersMethods();
-        }
-        else
+        } 
+        else 
           live.handlers.list = {};
       }
       return live.handlers.list;
@@ -845,8 +845,8 @@ Draw.loadPlugin(
     function buildExploitableData(raw, computationDataset = {}) {
       const {source, post, apitypeId} = computationDataset;
       const postProcessed = (post) ? post(raw) : raw;
-
-      if (post && !postProcessed)
+      
+      if (post && !postProcessed) 
         throw Error("'post' function for apitype " + apitypeId + " can't compute an exploitable object");
 
       const exploitable = new Function(
@@ -855,11 +855,10 @@ Draw.loadPlugin(
       )(postProcessed);
 
       if (!exploitable) {
-        const withPost = (post) ? ("after " + apitypeId + " post process") : "";
-        const withSource = (source) ? ("with given path: " + source) : "";
+        const withPost = (post) ? "after " + apitypeId + " post process" : "";
+        const withSource = (source) ? "with given path: " + source : "";
         throw Error(`No data available from API ${withPost} ${withSource}`);
       }
-
       return exploitable;
     }
 
@@ -871,26 +870,22 @@ Draw.loadPlugin(
 
     /**
      * Updates live status buttons in Live Palette according to current working status
-     * @param {boolean} newStatus Plugin current working status
+     * @param {boolean} isRunningStatus Plugin current working status
      * @param {boolean} isInit True in case of palette init
      */
-    function updateLivePalette(newStatus = true, isInit = false) {
-      // do not run if not initialized
+     function updateLivePalette(isRunningStatus = true, isInit = false) {
+      //! Do not run if not initialized
       if (!ui.isLivePluginEnabled)
         return;
+    
+      live.isRunning = isRunningStatus;
+      const buttons = [live.paletteButtons[live.isRunning ? "pause" : "start"]];
 
-      // FIXME: Ugly method to change pause/start button
-      if (!isInit) {
+      if (isInit)
+        buttons.unshift(live.paletteButtons.reload);
+      else
         ui.toolbar.container.removeChild(ui.toolbar.container.lastChild);
-        ui.toolbar.container.removeChild(ui.toolbar.container.lastChild);
-      }
-
-      live.isRunning = newStatus;
-      const buttons = [
-        live.paletteButtons[live.isRunning ? "pause" : "start"],
-        live.paletteButtons.reload
-      ];
-
+    
       buttons.forEach(
         ([label, tooltip, funct]) => ui.toolbar.addMenuFunction(
           label,
@@ -905,12 +900,10 @@ Draw.loadPlugin(
     /** Single update */
     function singleUpdate() {
       if (live.thread !== null) {
-        log("live thread already running - thread id:", live.thread);
+        log("live thread already running%c- thread id: " + live.thread);
         return;
       }
-
       loadUpdatesData();
-
       doUpdate();
     }
 
@@ -923,14 +916,11 @@ Draw.loadPlugin(
     /** Starts update process */
     function startScheduleUpdate() {
        if (live.thread !== null) {
-        log("live thread already running - thread id:", live.thread);
+        log("live thread already running%c- thread id: " + live.thread);
         return;
       }
-
       updateLivePalette(true);
-
       loadUpdatesData();
-
       loopUpdate();
     }
 
@@ -955,7 +945,7 @@ Draw.loadPlugin(
       live.nodes = findLiveNodes(graphXml);
     }
     /**
-     * Gets credentials to perform requests to a distant api requiring authentication.
+     * Gets credentials to perform requests to a distant api requiring authentication.  
      * Use live root credentials data if url is prefixed by base's **LIVE_API** attribute,
      * otherwise use targetted graph node live attributes
      * @param {Node} node Targetted graph node
@@ -965,9 +955,9 @@ Draw.loadPlugin(
     function getCredentials(node, root) {
       const credentials = {};
       for(const crd of live.credentials) {
-        if (node.getAttribute(crd))
+        if(node.getAttribute(crd)) 
           credentials[crd.slice(5)] = node.getAttribute(crd);
-        else
+        else 
           credentials[crd.slice(5)] = root.getAttribute(crd);
       }
       return (credentials.username || credentials.apikey) ? credentials : undefined;
@@ -978,7 +968,7 @@ Draw.loadPlugin(
      * @param {string} url Value stored in live attribute
      * @param {Node} node Targetted graph object
      * @param {Node} root Graph root node
-     * @returns {string} The computed request url
+     * @returns {string} The computed request url 
      */
     function buildUrl(url, node, root) {
       const nodeApi = node.getAttribute(LIVE_API);
@@ -1021,38 +1011,37 @@ Draw.loadPlugin(
      */
     function findLiveNodes(graphElement, liveNodes = []) {
       // base not is not checked
-      if (graphElement.getAttribute("id") !== live.pageBaseId) {
+      if(graphElement.getAttribute("id") !== live.pageBaseId) {
         const elementId = graphElement.getAttribute("id");
 
         // checks if current node is live
         let isLiveElement = false;
         for (const attribute of graphElement.attributes) {
-          if (live.isLiveAttribute(attribute.name)) {
+          if(live.isLiveAttribute(attribute.name)) {
             isLiveElement = true;
             break;
           }
         }
 
         // stores element id if element is live
-        if (isLiveElement) {
-          if (elementId !== null) {
+        if(isLiveElement) {
+          if(elementId !== null) {
             const liveNode = { id: elementId, elt: graphElement };
-            if (graphElement.nodeName === "mxCell")
-              liveNode.isCell = true;
+            if(graphElement.nodeName === "mxCell") liveNode.isCell = true;
             liveNodes.push(liveNode);
           }
         }
       }
 
       // if current element has children, finds live children
-      if (graphElement.children.length > 0)
+      if(graphElement.children.length > 0) 
         liveNodes = findLiveNodes(graphElement.firstChild, liveNodes);
 
       // performs check for sibling
       const sibling = graphElement.nextElementSibling;
-      if (sibling !== null)
+      if(sibling !== null)
         liveNodes = findLiveNodes(sibling, liveNodes);
-
+      
       return liveNodes;
     }
 
@@ -1062,7 +1051,7 @@ Draw.loadPlugin(
      * or with **LIVE_SOURCE** attributes in object & graph base
      * @param {Node} node Current handled graph node
      * @param {Node} root Graph root node
-     * @returns {object} Object containing data to  Path from or method to
+     * @returns {object} Object containing data to  Path from or method to 
      * transform corresponding api response in order to get an exploitable object
      */
     function getDataToFinalizeResponse(node, root) {
@@ -1105,7 +1094,7 @@ Draw.loadPlugin(
     }
 
     /**
-     * Adds to the graph object update node the
+     * Adds to the graph object update node the 
      * updated value for corresponding attribute
      * @param {Node} updateNode XML node containing graph object update data
      * @param {string} attrName Graph object attribute name
@@ -1113,24 +1102,34 @@ Draw.loadPlugin(
      * @param {string} initialTargetStyle Targetted graph node style before update
      */
     function fillUpdateNode(updateNode, attrName, attrValue, initialTargetStyle) {
-      if (attrName === LIVE_TEXT) {
-        updateNode.setAttribute("value", `<object label="${attrValue}"/>`);
+      /**
+       * Set updates for Text & Tooltip Live Attributes
+       * @param {boolean} isText `true` if current live attribute is Text
+       * @returns The updated value
+       */
+      function setTextUpdates(isText) {
+        const updatedValue = `${isText ? "label":"tooltip"}="${attrValue}" />`;
+        const previousValue = updateNode.getAttribute("value");
+
+        if (previousValue)
+          updateNode.setAttribute("value", previousValue.replace("/>", updatedValue));
+        else
+          updateNode.setAttribute("value", `<object ${updatedValue}`);
       }
+
+      if ([LIVE_TEXT, LIVE_TOOLTIP].includes(attrName))
+        setTextUpdates(attrName === LIVE_TEXT);
       else if (attrName === LIVE_STYLE)
         updateNode.setAttribute("style", attrValue);
       else {
-        // Checks if style has already been updated by another attribute
+        // Checks if style has already been updated by another attribute 
         let currentStyle = undefined;
         if (updateNode.hasAttribute("style"))
           currentStyle = updateNode.getAttribute("style");
         else
           currentStyle = initialTargetStyle;
         
-        const updatedStyle = mxUtils.setStyle(
-          currentStyle,
-          live.property.getName(attrName),
-          attrValue
-        );
+        const updatedStyle = mxUtils.setStyle(currentStyle, live.property.getName(attrName), attrValue);
         updateNode.setAttribute("style", updatedStyle);
       }
     }
@@ -1138,12 +1137,12 @@ Draw.loadPlugin(
     /**
      * Requests an extarnal API & returns parsed received response
      * @param {string} url Url to request API
-     * @param {boolean} isStringResponse True if API returns a simple response (string)
+     * @param {boolean} isStringResponse True if API returns a simple response (string) 
      * False if returns a complex response
      * @param {object} credentials Object containing API authentication data
      * @returns {string|object} Parsed API response
      */
-    function computeApiResponse(url, isSimpleResponse, credentials) {
+     function computeApiResponse(url, isStringResponse, credentials) {
       /**
        * Sets value for Authorization request header to access a protected API
        * @param {object} credentials Object containing request credentials
@@ -1152,13 +1151,14 @@ Draw.loadPlugin(
       function getAuthorizationValue(credentials) {
         const {username, password, apikey} = credentials;
 
-        if (username && password)
-          return "Basic " + btoa(`${username}:${password}`);
-        else if (apikey)
+        if (apikey)
           return "Bearer " + apikey;
+        else if (username && password)
+          return "Basic " + btoa(`${username}:${password}`);
         else
           throw Error("Credentials malformed");
       }
+
       try {
         let response = undefined;
         if (credentials) {
@@ -1182,7 +1182,6 @@ Draw.loadPlugin(
                 throw Error("Request failed with status " + xhr.status);
             }
           }
-
           xhr.send();
         }
         else {
@@ -1191,20 +1190,19 @@ Draw.loadPlugin(
             throw Error("No response received from request");
         }
 
-        if (isSimpleResponse)
+        if (isStringResponse)
           return response.replace(/"/g, "").trim();
 
         return JSON.parse(response);
-
       }
       catch (e) {
         throw Error("Error attempting to fetch data from " + url + ": " + e.message);
       }
     }
-
+    
     /**
-     * Handles case of mxCell containing live attributes without a parent object.  
-     * Moves live attributes from containing mxCell to its \<userObject> parent created by update process 
+     * Handles case of mxCell containing live attributes without a parent object.
+     * Moves live attributes from containing mxCell to its \<userObject> parent created by update process
      * @param {string} cellId Live cell's
      */
     function upgradeCellLiveNode(cellId) {
@@ -1213,7 +1211,7 @@ Draw.loadPlugin(
       const cell = parent.firstChild;
 
       live.all.forEach(liveAttribute => {
-        if (cell.hasAttribute(liveAttribute)) {
+        if(cell.hasAttribute(liveAttribute)) {
           parent.setAttribute(liveAttribute, cell.getAttribute(liveAttribute));
           cell.removeAttribute(liveAttribute);
         }
@@ -1254,7 +1252,7 @@ Draw.loadPlugin(
         );
       } catch(e) {
         throw Error(
-          "Given string cannot be parsed to an available function. " +
+          "Given string cannot be parsed to an available function. " + 
           "You should make sure that it is properly written."
         );
       }
@@ -1262,7 +1260,7 @@ Draw.loadPlugin(
 
     /**
      * Parses handlers methods from given string inputs.
-     * Creates an object containing associated JS methods for every
+     * Creates an object containing associated JS methods for every 
      * stored handler key which is returned & stored in `live.handlers.parsed`.
      * @returns {{handlerName: Function}} Parsed handlers
      */
@@ -1296,15 +1294,15 @@ Draw.loadPlugin(
       const handlerKeys = Object.keys(live.handlers.parsed);
       const handlerMethods = handlerKeys.map(name => live.handlers.parsed[name]);
       const updatedValue = new Function(
-        "data",
-        "self",
-        ...handlerKeys,
+        "data", 
+        "self", 
+        ...handlerKeys, 
         instructions.slice(1)
       )(apiResponses, selfApiResponse, ...handlerMethods);
 
-      if (!updatedValue)
+      if(!updatedValue) 
         throw Error("Instructions set didn't return anything");
-
+      
       return updatedValue;
     }
 
@@ -1367,10 +1365,10 @@ Draw.loadPlugin(
             const dataset = getDataToFinalizeResponse(liveNode, baseNode);
             exploitableResponse = buildExploitableData(rawResponse, dataset);
           }
-          namedApis.push({
-            response: exploitableResponse,
-            ref: apiRef || id,
-            url
+          namedApis.push({ 
+            response: exploitableResponse, 
+            ref: apiRef || id, 
+            url 
           });
         }
         catch(e) {
@@ -1434,12 +1432,14 @@ Draw.loadPlugin(
       ui.updateDiagram(mxUtils.getXml(xmlUpdatesDoc));
 
       /** Upgrades unwrapped graph live nodes */
-      live.nodes.forEach((liveNode) => {
-        if (liveNode.isCell) {
-          upgradeCellLiveNode(liveNode.id);
-          delete liveNode.isCell;
+      live.nodes.forEach(
+        liveNode => {
+          if (liveNode.isCell) {
+            upgradeCellLiveNode(liveNode.id);
+            delete liveNode.isCell;
+          }
         }
-      });
+      );
     }
 
     /**
@@ -1449,8 +1449,8 @@ Draw.loadPlugin(
      * @param {string} message Warning message to store
      */
     function setWarning(attribute, objectId, message = undefined) {
-      if (message === undefined) {
-        if (live.warnings[attribute] && live.warnings[attribute][objectId])
+      if(message === undefined) {
+        if(live.warnings[attribute] && (live.warnings[attribute][objectId]))
           delete live.warnings[attribute][objectId];
       }
       else {
@@ -1458,8 +1458,17 @@ Draw.loadPlugin(
           live.warnings[attribute] = {};
         if (!live.warnings[attribute][objectId])
           live.warnings[attribute][objectId] = [];
-        if (!live.warnings[attribute][objectId].some(warn => warn === message))
+        if (!live.warnings[attribute][objectId].some(warn => warn === message)) {
           live.warnings[attribute][objectId].push(message);
+
+          let introMsg = "Warning on ";
+          if(attribute === "handler")
+            introMsg += "'" + objectId + "'" + " handler:";
+          else
+            introMsg += attribute + " in object " + objectId + ":";
+
+          log(introMsg + "%c", message);
+        }
       }
     }
 
@@ -1471,24 +1480,28 @@ Draw.loadPlugin(
      * @returns {string} object attribute's corresponding id or an empty string
      */
     function getWarning(attribute, nodeId) {
-      if (!live.warnings[attribute] || !live.warnings[attribute][nodeId])
+      if(!live.warnings[attribute] || !live.warnings[attribute][nodeId]) 
         return "";
       else
         return live.warnings[attribute][nodeId].join("\n");
     }
 
     function clearWarnings() {
-      if (live.warnings.handler) {
+      if(live.warnings.handler) {
         const handler = {...live.warnings.handler};
         live.warnings = { handler };
       }
-      else {
+      else 
         live.warnings = {};
-      }
     }
 
     function log(...text) {
-      console.log("liveUpdate plugin:", ...text);
+      console.log(
+        "%cLive Update plugin%c\n  " + [...text].join(""), 
+        "text-decoration: underline dotted",
+        "font-weight: bold",
+        "font-weight: normal",
+      );
     }
 
     initPlugin();
