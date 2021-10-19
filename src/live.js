@@ -1500,6 +1500,7 @@
         "%cLive Update plugin%c\n  " + [...text].join(""), 
         "text-decoration: underline dotted",
         "font-weight: bold",
+        "font-weight: normal",
       );
     }
 
