@@ -1,23 +1,23 @@
 /**
  * Live Update plugin.
- * 
+ *
  * Allows you to update separately each selected graph element.
  * Use live attributes to configure the plugin.
- * 
+ *
  * In the metadata of the diagram (graph element with id = 0)
  *    - LIVE_API: url prefix to request the distant API (optional, see below).
- *    - LIVE_REFRESH: interval between 2 updates, set in seconds (optional, 
+ *    - LIVE_REFRESH: interval between 2 updates, set in seconds (optional,
  *      default is 10s).
- * 
- * In the graph objects properties (right click > "Edit Data" or 
+ *
+ * In the graph objects properties (right click > "Edit Data" or
  * CTRL+M):
  *    - LIVE_DATA: calls a complex API (returning an object)
  *    - LIVE_TEXT: updates element text node.
  *    - LIVE_STYLE: updates element style.
  *    - live.property.<PROPERTY_NAME>: updates element <PROPERTY_NAME> value.
- *        Example: "live.property.fillOpacity" updates "Fill Opacity" element 
+ *        Example: "live.property.fillOpacity" updates "Fill Opacity" element
  *        property.
- * 
+ *
  * See documentation for more details.
  */
  Draw.loadPlugin(
@@ -53,7 +53,7 @@
       property: {
         prefix: "live.property.",
         getName: (fullPropName) => fullPropName.slice(live.property.prefix.length)
-      },      
+      },
       /**
        * Checks if targetted live attribute handles an anonymous api
        * receiving the updates value or if it contains js instructions
@@ -316,7 +316,7 @@
       const formatRefreshBasicFunc = ui.format.immediateRefresh;
       ui.format.immediateRefresh = function() {
         mxUtils.bind(ui.format, formatRefreshBasicFunc)();
-        if(!ui.editor.graph.isEditing()) 
+        if(!ui.editor.graph.isEditing())
           addLiveTabToFormatPanel();
       }
     }
@@ -803,20 +803,20 @@
     }
 
     function storeHandlers(rebuild = false, computed = false) {
-      if (!rebuild && Object.keys(live.handlers.list).length > 0) 
+      if (!rebuild && Object.keys(live.handlers.list).length > 0)
         return live.handlers.list;
 
       if (computed) {
         live.handlers.list = computed;
         getHandlersMethods();
-      } 
+      }
       else {
         const graphXml = ui.editor.getGraphXml();
         const root = mxUtils.findNode(graphXml, "id", live.pageBaseId);
         const handlersStr = root.getAttribute(LIVE_HANDLERS);
         const sep = live.handlers.separators;
         const handlers = {};
-  
+
         if(handlersStr) {
           /** Parses input string to work in handlers object */
           handlersStr.split(sep.list).forEach(
@@ -829,8 +829,8 @@
           );
           live.handlers.list = handlers;
           getHandlersMethods();
-        } 
-        else 
+        }
+        else
           live.handlers.list = {};
       }
       return live.handlers.list;
@@ -845,8 +845,8 @@
     function buildExploitableData(raw, computationDataset = {}) {
       const {source, post, apitypeId} = computationDataset;
       const postProcessed = (post) ? post(raw) : raw;
-      
-      if (post && !postProcessed) 
+
+      if (post && !postProcessed)
         throw Error("'post' function for apitype " + apitypeId + " can't compute an exploitable object");
 
       const exploitable = new Function(
@@ -877,7 +877,7 @@
       //! Do not run if not initialized
       if (!ui.isLivePluginEnabled)
         return;
-    
+
       live.isRunning = isRunningStatus;
       const buttons = [live.paletteButtons[live.isRunning ? "pause" : "start"]];
 
@@ -885,7 +885,7 @@
         buttons.unshift(live.paletteButtons.reload);
       else
         ui.toolbar.container.removeChild(ui.toolbar.container.lastChild);
-    
+
       buttons.forEach(
         ([label, tooltip, funct]) => ui.toolbar.addMenuFunction(
           label,
@@ -945,7 +945,7 @@
       live.nodes = findLiveNodes(graphXml);
     }
     /**
-     * Gets credentials to perform requests to a distant api requiring authentication.  
+     * Gets credentials to perform requests to a distant api requiring authentication.
      * Use live root credentials data if url is prefixed by base's **LIVE_API** attribute,
      * otherwise use targetted graph node live attributes
      * @param {Node} node Targetted graph node
@@ -955,9 +955,9 @@
     function getCredentials(node, root) {
       const credentials = {};
       for(const crd of live.credentials) {
-        if(node.getAttribute(crd)) 
+        if(node.getAttribute(crd))
           credentials[crd.slice(5)] = node.getAttribute(crd);
-        else 
+        else
           credentials[crd.slice(5)] = root.getAttribute(crd);
       }
       return (credentials.username || credentials.apikey) ? credentials : undefined;
@@ -968,7 +968,7 @@
      * @param {string} url Value stored in live attribute
      * @param {Node} node Targetted graph object
      * @param {Node} root Graph root node
-     * @returns {string} The computed request url 
+     * @returns {string} The computed request url
      */
     function buildUrl(url, node, root) {
       const nodeApi = node.getAttribute(LIVE_API);
@@ -1034,14 +1034,14 @@
       }
 
       // if current element has children, finds live children
-      if(graphElement.children.length > 0) 
+      if(graphElement.children.length > 0)
         liveNodes = findLiveNodes(graphElement.firstChild, liveNodes);
 
       // performs check for sibling
       const sibling = graphElement.nextElementSibling;
       if(sibling !== null)
         liveNodes = findLiveNodes(sibling, liveNodes);
-      
+
       return liveNodes;
     }
 
@@ -1051,7 +1051,7 @@
      * or with **LIVE_SOURCE** attributes in object & graph base
      * @param {Node} node Current handled graph node
      * @param {Node} root Graph root node
-     * @returns {object} Object containing data to  Path from or method to 
+     * @returns {object} Object containing data to  Path from or method to
      * transform corresponding api response in order to get an exploitable object
      */
     function getDataToFinalizeResponse(node, root) {
@@ -1094,7 +1094,7 @@
     }
 
     /**
-     * Adds to the graph object update node the 
+     * Adds to the graph object update node the
      * updated value for corresponding attribute
      * @param {Node} updateNode XML node containing graph object update data
      * @param {string} attrName Graph object attribute name
@@ -1122,13 +1122,13 @@
       else if (attrName === LIVE_STYLE)
         updateNode.setAttribute("style", attrValue);
       else {
-        // Checks if style has already been updated by another attribute 
+        // Checks if style has already been updated by another attribute
         let currentStyle = undefined;
         if (updateNode.hasAttribute("style"))
           currentStyle = updateNode.getAttribute("style");
         else
           currentStyle = initialTargetStyle;
-        
+
         const updatedStyle = mxUtils.setStyle(currentStyle, live.property.getName(attrName), attrValue);
         updateNode.setAttribute("style", updatedStyle);
       }
@@ -1137,7 +1137,7 @@
     /**
      * Requests an extarnal API & returns parsed received response
      * @param {string} url Url to request API
-     * @param {boolean} isStringResponse True if API returns a simple response (string) 
+     * @param {boolean} isStringResponse True if API returns a simple response (string)
      * False if returns a complex response
      * @param {object} credentials Object containing API authentication data
      * @returns {string|object} Parsed API response
@@ -1199,7 +1199,7 @@
         throw Error("Error attempting to fetch data from " + url + ": " + e.message);
       }
     }
-    
+
     /**
      * Handles case of mxCell containing live attributes without a parent object.
      * Moves live attributes from containing mxCell to its \<userObject> parent created by update process
@@ -1252,7 +1252,7 @@
         );
       } catch(e) {
         throw Error(
-          "Given string cannot be parsed to an available function. " + 
+          "Given string cannot be parsed to an available function. " +
           "You should make sure that it is properly written."
         );
       }
@@ -1260,7 +1260,7 @@
 
     /**
      * Parses handlers methods from given string inputs.
-     * Creates an object containing associated JS methods for every 
+     * Creates an object containing associated JS methods for every
      * stored handler key which is returned & stored in `live.handlers.parsed`.
      * @returns {{handlerName: Function}} Parsed handlers
      */
@@ -1294,15 +1294,15 @@
       const handlerKeys = Object.keys(live.handlers.parsed);
       const handlerMethods = handlerKeys.map(name => live.handlers.parsed[name]);
       const updatedValue = new Function(
-        "data", 
-        "self", 
-        ...handlerKeys, 
+        "data",
+        "self",
+        ...handlerKeys,
         instructions.slice(1)
       )(apiResponses, selfApiResponse, ...handlerMethods);
 
-      if(!updatedValue) 
+      if(!updatedValue)
         throw Error("Instructions set didn't return anything");
-      
+
       return updatedValue;
     }
 
@@ -1354,8 +1354,8 @@
           const isAlreadyComputed = namedApis.find(api => api.url === url);
 
           /**
-           * Checks if corresponding url response is already 
-           * computed in order to prevent multi calls on same API 
+           * Checks if corresponding url response is already
+           * computed in order to prevent multi calls on same API
            */
           if (isAlreadyComputed)
             exploitableResponse = isAlreadyComputed.response;
@@ -1365,10 +1365,10 @@
             const dataset = getDataToFinalizeResponse(liveNode, baseNode);
             exploitableResponse = buildExploitableData(rawResponse, dataset);
           }
-          namedApis.push({ 
-            response: exploitableResponse, 
-            ref: apiRef || id, 
-            url 
+          namedApis.push({
+            response: exploitableResponse,
+            ref: apiRef || id,
+            url
           });
         }
         catch(e) {
@@ -1480,7 +1480,7 @@
      * @returns {string} object attribute's corresponding id or an empty string
      */
     function getWarning(attribute, nodeId) {
-      if(!live.warnings[attribute] || !live.warnings[attribute][nodeId]) 
+      if(!live.warnings[attribute] || !live.warnings[attribute][nodeId])
         return "";
       else
         return live.warnings[attribute][nodeId].join("\n");
@@ -1491,13 +1491,13 @@
         const handler = {...live.warnings.handler};
         live.warnings = { handler };
       }
-      else 
+      else
         live.warnings = {};
     }
 
     function log(...text) {
       console.log(
-        "%cLive Update plugin%c\n  " + [...text].join(""), 
+        "%cLive Update plugin%c\n  " + [...text].join(""),
         "text-decoration: underline dotted",
         "font-weight: bold",
         "font-weight: normal",
