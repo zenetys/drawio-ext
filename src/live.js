@@ -695,9 +695,9 @@
           }
           else {
             if (nameFieldIsEmpty)
-              log("%c" + getLabel("error") + "name!");
+              log(getLabel("error") + "name!");
             if (valueFieldIsEmpty)
-              log("%c" + getLabel("error") + "value!");
+              log(getLabel("error") + "value!");
           }
         }
 
@@ -751,7 +751,7 @@
       const graphXml = ui.editor.getGraphXml();
       const target = mxUtils.findNode(graphXml, "id", targetId);
       const msg = {
-        prop: type === "property" ? "%cProperty " + name + " " : "Handlers updated:%c"
+        prop: type === "property" ? "Property " + name + " " : "Handlers updated:"
       };
 
       if (type === "property") {
@@ -900,7 +900,7 @@
     /** Single update */
     function singleUpdate() {
       if (live.thread !== null) {
-        log("live thread already running%c- thread id: " + live.thread);
+        log("live thread already running, thread id: " + live.thread);
         return;
       }
       loadUpdatesData();
@@ -916,7 +916,7 @@
     /** Starts update process */
     function startScheduleUpdate() {
        if (live.thread !== null) {
-        log("live thread already running%c- thread id: " + live.thread);
+        log("live thread already running, thread id: " + live.thread);
         return;
       }
       updateLivePalette(true);
@@ -1467,7 +1467,7 @@
           else
             introMsg += attribute + " in object " + objectId + ": ";
 
-          log(introMsg + "%c", message);
+          log(introMsg, message);
         }
       }
     }
@@ -1496,11 +1496,9 @@
     }
 
     function log(...text) {
-      console.log(
-        "%cLive Update plugin%c\n  " + [...text].join(""),
-        "text-decoration: underline dotted",
-        "font-weight: bold",
-        "font-weight: normal",
+      console.log("%cLive plugin:%c",
+        "text-decoration: underline dotted", "",
+        ...text,
       );
     }
 
