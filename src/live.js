@@ -791,7 +791,7 @@
       ui.editor.graph.selectionModel.changeSelection(selectedCells);
 
       if (targetId === live.pageBaseId)
-        msg.obj = "graph base";
+        msg.obj = "page base";
       else
         msg.obj = "object with id " + targetId;
 
