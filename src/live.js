@@ -1204,7 +1204,7 @@
           xhr.onreadystatechange = function() {
             if (xhr.readyState === 4) {
               if (xhr.status >= 200 && xhr.status < 300)
-                response = xhr.responseText.trim();
+                response = xhr.responseText;
               else
                 throw Error("Request failed with status " + xhr.status);
             }
