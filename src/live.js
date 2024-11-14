@@ -195,6 +195,7 @@
               }
               // Reset live base data
               live.pageBaseId = ui.currentPage.root.getId();
+              log("Base ID after page change event:", live.pageBaseId)
             }
           }
         });
@@ -938,6 +939,7 @@
       live.nodes = [];
       live.timeout = 0;
       live.pageBaseId = ui.currentPage.root.getId();
+      log("Base ID updated before data fetch:", live.pageBaseId)
 
       const graphXml = ui.editor.getGraphXml();
       const baseNode = mxUtils.findNode(graphXml, "id", live.pageBaseId);
