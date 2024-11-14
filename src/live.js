@@ -909,17 +909,19 @@
 
       if (isInit)
         buttons.unshift(live.paletteButtons.reload);
-      else
-        ui.toolbar.container.removeChild(ui.toolbar.container.lastChild);
+      else {
+        let els = ui.toolbar.container.querySelectorAll(":scope > .live-action-button");
+        if (els.length > 0)
+            ui.toolbar.container.removeChild(els[els.length-1] /* last */);
+      }
 
       buttons.forEach(
-        ([label, tooltip, funct]) => ui.toolbar.addMenuFunction(
-          label,
-          tooltip,
-          true,
-          funct,
-          ui.toolbar.container
-        )
+        ([label, tooltip, funct]) => {
+          let el = ui.toolbar.addMenuFunction(label, tooltip, true, funct,
+            ui.toolbar.container);
+          if (el)
+            el.classList.add("live-action-button");
+        }
       );
     }
 
