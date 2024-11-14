@@ -152,7 +152,7 @@
         });
 
         // Adds a listener to stop the ongoing update process if page changed
-        ui.editor.addListener(mxUtils.CHANGE, function() {
+        ui.editor.addListener(undefined, function() {
           if (ui && ui.currentPage && ui.currentPage.root) {
             const currentPageBaseId = ui.currentPage.root.getId();
             if (live.pageBaseId !== currentPageBaseId) {
@@ -168,7 +168,7 @@
         });
 
         /** Adds a listener to stop update process when a graph node is selected */
-        ui.editor.graph.selectionModel.addListener(mxUtils.CHANGE, function() {
+        ui.editor.graph.selectionModel.addListener(undefined, function(a,b,c) {
           const isSelectionEmpty = ui.editor.graph.isSelectionEmpty();
           const { isRunning } = live;
           if(isRunning && !isSelectionEmpty) pauseScheduleUpdate();
