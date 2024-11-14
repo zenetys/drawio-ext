@@ -134,36 +134,83 @@
 
     /** Launches "Live" feature in webapp */
     function initPlugin() {
-      // Autostart in chromeless mode
+      /* Intercept "load" event sent from draw.io (us) to our parent window
+       * in embed mode. In embed mode, no "fileLoaded" gets fired, however
+       * we need an event to fire when the diagram has been setup in order
+       * to initialize live.pageBaseId. */
+      function addEmbedLoadListener(cb) {
+        let parentWindow = window.opener || window.parent;
+        parentWindow?.addEventListener("message", function (ev) {
+          if (ev.source !== window || typeof ev.data !== "string")
+            return; /* ignore */
+          /* Cheap way of checking a "load" event in ev.data because JSON
+           * may be heavy to parse since it contains the diagram XML. */
+          if (ev.data.substring(0,16) == '{"event":"load",')
+            cb(ev);
+        });
+      }
+
       if (ui.editor.isChromelessView()) {
-        ui.editor.addListener('fileLoaded', startScheduleUpdate);
+          /* Autostart live updates in chromeless mode. Note: updates get
+           * stopped before to handle page changes or diagram loads via
+           * hash tags. */
+
+          // embed mode
+          addEmbedLoadListener(function (ev) {
+            log("Got embed load event, start live updates");
+            pauseScheduleUpdate();
+            startScheduleUpdate();
+          });
+
+          // classic file mode
+          ui.editor.addListener(undefined, function(editor, ev) {
+            if (ev.name == "fileLoaded" || ev.name == "pageSelected") {
+              log("Got " + ev.name + " event, start live updates");
+              pauseScheduleUpdate();
+              startScheduleUpdate();
+            }
+          });
       }
       else {
         ui.format.showCloseButton = false;
-        ui.editor.addListener("fileLoaded", function(e) {
-          // Inits live features on page wake & prevents multi loads
-          if (!ui.isLivePluginEnabled) {
-            ui.isLivePluginEnabled = true;
-            addLiveUpdatePalette();
-            addLiveTabToFormatPanel();
-            overrideFormatPanelRefresh();
-            storeHandlers();
-          }
-        });
 
-        // Adds a listener to stop the ongoing update process if page changed
-        ui.editor.addListener(undefined, function() {
+        function resetLiveEditor() {
           if (ui && ui.currentPage && ui.currentPage.root) {
             const currentPageBaseId = ui.currentPage.root.getId();
             if (live.pageBaseId !== currentPageBaseId) {
               if (live.thread) {
-                log("Refresh feature stopped due to graph page change");
+                log("Refresh feature stopped due to page change");
                 pauseScheduleUpdate();
               }
               // Reset live base data
               live.pageBaseId = ui.currentPage.root.getId();
               log("Base ID after page change event:", live.pageBaseId)
             }
+          }
+          if (!ui.isLivePluginEnabled) {
+            ui.isLivePluginEnabled = true;
+            addLiveUpdatePalette();
+            overrideFormatPanelRefresh();
+            addLiveTabToFormatPanel();
+            storeHandlers();
+          }
+        }
+
+        /* Adds a listeners to (re)initialize the plugin and stop the ongoing
+         * update process when a diagram is loaded, including when a page has
+         * changed. */
+
+        // embed mode
+        addEmbedLoadListener(function (ev) {
+          log("Got embed load event, reset editor");
+          resetLiveEditor();
+        });
+
+        // classic file mode
+        ui.editor.addListener(undefined, function(editor, ev) {
+          if (ev.name == "fileLoaded" || ev.name == "pageSelected") {
+            log("Got " + ev.name + " event, reset editor");
+            resetLiveEditor();
           }
         });
 
