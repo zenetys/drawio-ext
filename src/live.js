@@ -236,16 +236,16 @@
     /** Adds "Live" custom format tab in Format Panel */
     function addLiveTabToFormatPanel() {
       const formatContainer = document.querySelector(".geFormatContainer");
-      const formatTabs = formatContainer.firstChild;
+      const formatTabs = formatContainer?.firstChild;
       if (!formatTabs)
+        return; /* ui not ready yet? */
+      if (formatTabs.querySelector(":scope > .live-format-tab") !== null) {
+        log("BUG: Live format tab already present, skip creation");
         return;
+      }
 
       const formatWidth = parseInt(formatContainer.style.width);
-      const formatTabsMax = ui.editor.graph.isSelectionEmpty() ? 3 : 4;
       const formatTabsNb = formatTabs.childNodes.length;
-
-      if (formatTabsNb >= formatTabsMax)
-        return;
 
       // Adds tab only if formatWidth > 0 === format panel is displayed
       if (formatWidth > 0) {
@@ -270,6 +270,7 @@
 
         const liveTab = formatTabs.firstChild.cloneNode(false);
         liveTab.style.width = tabLength;
+        liveTab.classList.add("live-format-tab");
         setTabStyle(liveTab);
         mxUtils.write(liveTab, "Live");
         formatTabs.appendChild(liveTab);
