@@ -695,9 +695,9 @@
           }
           else {
             if (nameFieldIsEmpty)
-              log("%c" + getLabel("error") + "name !");
+              log("%c" + getLabel("error") + "name!");
             if (valueFieldIsEmpty)
-              log("%c" + getLabel("error") + "value !");
+              log("%c" + getLabel("error") + "value!");
           }
         }
 
