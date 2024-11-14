@@ -248,83 +248,84 @@
       const formatTabsNb = formatTabs.childNodes.length;
 
       // Adds tab only if formatWidth > 0 === format panel is displayed
-      if (formatWidth > 0) {
-        const tabLength = parseInt(formatWidth / (formatTabsNb + 1));
-        for (const tab of formatTabs.children) {
-          tab.style.width = tabLength + "px";
-        }
+      if (formatWidth <= 0)
+        return;
 
-        /**
-         * Sets Format Panel tab style, depending
-         * on if current tab is focused one or not
-         * @param {HTMLElement} elt Format Panel tab
-         * @param {boolean} isActiveTab True if selected tab is active one
-         * @param {number} tab index
-         */
-        function setTabStyle(elt, isActiveTab = false, index) {
-          elt.style.backgroundColor = isActiveTab ? "inherit" : Format.inactiveTabBackgroundColor;
-          elt.style.borderBottomWidth = isActiveTab ? "0px" : "1px";
-          if (index > 0 && isActiveTab && !ui.editor.graph.isSelectionEmpty())
-            elt.style.borderLeftWidth = "1px";
-        }
+      const tabLength = parseInt(formatWidth / (formatTabsNb + 1));
+      for (const tab of formatTabs.children) {
+        tab.style.width = tabLength + "px";
+      }
 
-        const liveTab = formatTabs.firstChild.cloneNode(false);
-        liveTab.style.width = tabLength;
-        liveTab.classList.add("live-format-tab");
-        setTabStyle(liveTab);
-        mxUtils.write(liveTab, "Live");
-        formatTabs.appendChild(liveTab);
+      /**
+       * Sets Format Panel tab style, depending
+       * on if current tab is focused one or not
+       * @param {HTMLElement} elt Format Panel tab
+       * @param {boolean} isActiveTab True if selected tab is active one
+       * @param {number} tab index
+       */
+      function setTabStyle(elt, isActiveTab = false, index) {
+        elt.style.backgroundColor = isActiveTab ? "inherit" : Format.inactiveTabBackgroundColor;
+        elt.style.borderBottomWidth = isActiveTab ? "0px" : "1px";
+        if (index > 0 && isActiveTab && !ui.editor.graph.isSelectionEmpty())
+          elt.style.borderLeftWidth = "1px";
+      }
 
-        /**
-         * Listener called at "click" on format panel tabs
-         * Displays Live Format Panel if liveTab is clicked
-         * @param {HTMLElement} targettedTab Format Panel clicked tab
-         */
-        function handleLiveFormatPanelDisplay(targettedTab, liveContent) {
-          if (targettedTab === liveTab) {
-            // selected tab is Live => display Live Format Panel
-            live.formatPanel.isDisplayed = true;
-            liveContent.style.display = "block";
-            formatContainer.appendChild(liveContent);
+      const liveTab = formatTabs.firstChild.cloneNode(false);
+      liveTab.style.width = tabLength;
+      liveTab.classList.add("live-format-tab");
+      setTabStyle(liveTab);
+      mxUtils.write(liveTab, "Live");
+      formatTabs.appendChild(liveTab);
 
-            for (let t = 0; t < formatTabs.children.length; t++) {
-              setTabStyle(formatTabs.children[t], formatTabs.children[t] === liveTab, t);
-            }
+      /**
+       * Listener called at "click" on format panel tabs
+       * Displays Live Format Panel if liveTab is clicked
+       * @param {HTMLElement} targettedTab Format Panel clicked tab
+       */
+      function handleLiveFormatPanelDisplay(targettedTab, liveContent) {
+        if (targettedTab === liveTab) {
+          // selected tab is Live => display Live Format Panel
+          live.formatPanel.isDisplayed = true;
+          liveContent.style.display = "block";
+          formatContainer.appendChild(liveContent);
 
-            for (const content of formatContainer.childNodes) {
-              if (content !== formatTabs) {
-                content.style.display = (content === liveContent) ? "block" : "none";
-              }
-            }
+          for (let t = 0; t < formatTabs.children.length; t++) {
+            setTabStyle(formatTabs.children[t], formatTabs.children[t] === liveTab, t);
           }
-          else {
-            // Hides Live panel & display selected one
-            live.formatPanel.isDisplayed = false;
-            setTabStyle(liveTab);
-            liveContent.style.display = "none";
 
-            // Sets focused tab style & displays its content
-            const tabs = Array.from(formatTabs.childNodes);
-            if (tabs) {
-              const focusedTabId = tabs.findIndex(tab => (tab === targettedTab));
-              if (ui.format.panels[focusedTabId]) {
-                ui.format.panels[focusedTabId].container.style.display = "block";
-                setTabStyle(targettedTab, true);
-              }
+          for (const content of formatContainer.childNodes) {
+            if (content !== formatTabs) {
+              content.style.display = (content === liveContent) ? "block" : "none";
             }
           }
         }
+        else {
+          // Hides Live panel & display selected one
+          live.formatPanel.isDisplayed = false;
+          setTabStyle(liveTab);
+          liveContent.style.display = "none";
 
-        const liveContent = buildLiveFormatPanelContent();
-        if (liveContent) {
-          if (live.formatPanel.isDisplayed) {
-            handleLiveFormatPanelDisplay(liveTab, liveContent);
+          // Sets focused tab style & displays its content
+          const tabs = Array.from(formatTabs.childNodes);
+          if (tabs) {
+            const focusedTabId = tabs.findIndex(tab => (tab === targettedTab));
+            if (ui.format.panels[focusedTabId]) {
+              ui.format.panels[focusedTabId].container.style.display = "block";
+              setTabStyle(targettedTab, true);
+            }
           }
-
-          mxEvent.addListener(formatTabs, "click", function(e) {
-            handleLiveFormatPanelDisplay(e.target, liveContent);
-          });
         }
+      }
+
+      const liveContent = buildLiveFormatPanelContent();
+      if (liveContent) {
+        if (live.formatPanel.isDisplayed) {
+          handleLiveFormatPanelDisplay(liveTab, liveContent);
+        }
+
+        mxEvent.addListener(formatTabs, "click", function(e) {
+          handleLiveFormatPanelDisplay(e.target, liveContent);
+        });
       }
     }
 
