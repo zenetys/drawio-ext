@@ -1217,10 +1217,14 @@
             throw Error("No response received from request");
         }
 
-        if (isStringResponse)
+        if (isStringResponse) {
+          log(`URL: ${url}, Raw data:`, response);
           return response.replace(/"/g, "").trim();
+        }
 
-        return JSON.parse(response);
+        let data = JSON.parse(response);
+        log(`URL: ${url}, JSON data:`, data);
+        return data;
       }
       catch (e) {
         throw Error("Error attempting to fetch data from " + url + ": " + e.message);
