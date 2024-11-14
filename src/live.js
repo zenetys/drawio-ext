@@ -1463,9 +1463,9 @@
 
           let introMsg = "Warning on ";
           if(attribute === "handler")
-            introMsg += "'" + objectId + "'" + " handler:";
+            introMsg += "'" + objectId + "'" + " handler: ";
           else
-            introMsg += attribute + " in object " + objectId + ":";
+            introMsg += attribute + " in object " + objectId + ": ";
 
           log(introMsg + "%c", message);
         }
