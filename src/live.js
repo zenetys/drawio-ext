@@ -259,11 +259,12 @@
          * on if current tab is focused one or not
          * @param {HTMLElement} elt Format Panel tab
          * @param {boolean} isActiveTab True if selected tab is active one
+         * @param {number} tab index
          */
-        function setTabStyle(elt, isActiveTab = false) {
+        function setTabStyle(elt, isActiveTab = false, index) {
           elt.style.backgroundColor = isActiveTab ? "inherit" : Format.inactiveTabBackgroundColor;
           elt.style.borderBottomWidth = isActiveTab ? "0px" : "1px";
-          if (isActiveTab && !ui.editor.graph.isSelectionEmpty())
+          if (index > 0 && isActiveTab && !ui.editor.graph.isSelectionEmpty())
             elt.style.borderLeftWidth = "1px";
         }
 
@@ -285,8 +286,8 @@
             liveContent.style.display = "block";
             formatContainer.appendChild(liveContent);
 
-            for (const tab of formatTabs.children) {
-              setTabStyle(tab, tab === liveTab);
+            for (let t = 0; t < formatTabs.children.length; t++) {
+              setTabStyle(formatTabs.children[t], formatTabs.children[t] === liveTab, t);
             }
 
             for (const content of formatContainer.childNodes) {
