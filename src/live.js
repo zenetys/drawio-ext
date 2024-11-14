@@ -277,13 +277,26 @@
       mxUtils.write(liveTab, "Live");
       formatTabs.appendChild(liveTab);
 
+      let liveContent = undefined;
+
       /**
        * Listener called at "click" on format panel tabs
        * Displays Live Format Panel if liveTab is clicked
        * @param {HTMLElement} targettedTab Format Panel clicked tab
        */
-      function handleLiveFormatPanelDisplay(targettedTab, liveContent) {
+      function handleLiveFormatPanelDisplay(targettedTab) {
+        // remove previous panel if any
+        liveContent?.remove();
+
         if (targettedTab === liveTab) {
+          /* Building the panel depends on identification of selected node
+           * or page root id, hence may still fail when transitioning from
+           * one diagram to another when the live tab is opened. In such
+           * case just skip it. */
+          liveContent = buildLiveFormatPanelContent();
+          if (!liveContent)
+            return;
+
           // selected tab is Live => display Live Format Panel
           live.formatPanel.isDisplayed = true;
           liveContent.style.display = "block";
@@ -303,7 +316,6 @@
           // Hides Live panel & display selected one
           live.formatPanel.isDisplayed = false;
           setTabStyle(liveTab);
-          liveContent.style.display = "none";
 
           // Sets focused tab style & displays its content
           const tabs = Array.from(formatTabs.childNodes);
@@ -317,16 +329,12 @@
         }
       }
 
-      const liveContent = buildLiveFormatPanelContent();
-      if (liveContent) {
-        if (live.formatPanel.isDisplayed) {
-          handleLiveFormatPanelDisplay(liveTab, liveContent);
-        }
+      if (live.formatPanel.isDisplayed)
+        handleLiveFormatPanelDisplay(liveTab);
 
-        mxEvent.addListener(formatTabs, "click", function(e) {
-          handleLiveFormatPanelDisplay(e.target, liveContent);
-        });
-      }
+      mxEvent.addListener(formatTabs, "click", function(e) {
+        handleLiveFormatPanelDisplay(e.target);
+      });
     }
 
     /** Overrides format panel reshresh event to add Live tab */
