@@ -134,6 +134,10 @@
 
     /** Launches "Live" feature in webapp */
     function initPlugin() {
+      var isChromelessView = ui.editor.isChromelessView();
+      var isLightboxView = ui.editor.graph.isLightboxView();
+      log('isChromelessView', isChromelessView, 'isLightboxView', isLightboxView);
+
       /* Intercept "load" event sent from draw.io (us) to our parent window
        * in embed mode. In embed mode, no "fileLoaded" gets fired, however
        * we need an event to fire when the diagram has been setup in order
@@ -150,25 +154,38 @@
         });
       }
 
-      if (ui.editor.isChromelessView()) {
+      if (isChromelessView) {
         /* Autostart live updates in chromeless mode. Note: updates get
          * stopped before to handle page changes or diagram loads via
          * hash tags. */
 
-        // embed mode
-        addEmbedLoadListener(function (ev) {
-          log("Got embed load event");
+        function resetLiveViewer() {
           pauseScheduleUpdate();
           startScheduleUpdate();
+          /* First live data fetch performed during startScheduleUpdate() loop
+           * is sychronous, ending up with calls to ui.editor.setGraphXml()
+           * from upgradeCellLiveNode(). This probably disturb lightbox fit and
+           * resize on graph load, so let's call it here. It is good to call
+           * it as well on page change to rescale the new graph. */
+          if (isLightboxView) {
+            log("Lightbox mode, fit and resize");
+            ui.lightboxFit();
+            ui.chromelessResize(false);
+          }
+        }
+
+        // embed mode
+        addEmbedLoadListener(function (ev) {
+          log("Got embed load event, reset viewer");
+          resetLiveViewer();
         });
 
         // classic file mode for fileLoaded event
         // both classic and embed modes for pageSelected
         ui.editor.addListener(undefined, function(editor, ev) {
           if (ev.name == "fileLoaded" || ev.name == "pageSelected") {
-            log("Got " + ev.name + " event");
-            pauseScheduleUpdate();
-            startScheduleUpdate();
+            log("Got " + ev.name + " event, reset viewer");
+            resetLiveViewer();
           }
         });
       }
