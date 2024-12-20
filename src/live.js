@@ -943,7 +943,7 @@
 
     /** Starts update process */
     function startScheduleUpdate() {
-       if (live.thread !== null) {
+      if (live.thread !== null) {
         log("live thread already running, thread id: " + live.thread);
         return;
       }
