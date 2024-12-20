@@ -151,25 +151,25 @@
       }
 
       if (ui.editor.isChromelessView()) {
-          /* Autostart live updates in chromeless mode. Note: updates get
-           * stopped before to handle page changes or diagram loads via
-           * hash tags. */
+        /* Autostart live updates in chromeless mode. Note: updates get
+         * stopped before to handle page changes or diagram loads via
+         * hash tags. */
 
-          // embed mode
-          addEmbedLoadListener(function (ev) {
-            log("Got embed load event, start live updates");
+        // embed mode
+        addEmbedLoadListener(function (ev) {
+          log("Got embed load event, start live updates");
+          pauseScheduleUpdate();
+          startScheduleUpdate();
+        });
+
+        // classic file mode
+        ui.editor.addListener(undefined, function(editor, ev) {
+          if (ev.name == "fileLoaded" || ev.name == "pageSelected") {
+            log("Got " + ev.name + " event, start live updates");
             pauseScheduleUpdate();
             startScheduleUpdate();
-          });
-
-          // classic file mode
-          ui.editor.addListener(undefined, function(editor, ev) {
-            if (ev.name == "fileLoaded" || ev.name == "pageSelected") {
-              log("Got " + ev.name + " event, start live updates");
-              pauseScheduleUpdate();
-              startScheduleUpdate();
-            }
-          });
+          }
+        });
       }
       else {
         ui.format.showCloseButton = false;
