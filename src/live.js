@@ -162,7 +162,8 @@
           startScheduleUpdate();
         });
 
-        // classic file mode
+        // classic file mode for fileLoaded event
+        // both classic and embed modes for pageSelected
         ui.editor.addListener(undefined, function(editor, ev) {
           if (ev.name == "fileLoaded" || ev.name == "pageSelected") {
             log("Got " + ev.name + " event, start live updates");
