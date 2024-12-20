@@ -157,7 +157,7 @@
 
         // embed mode
         addEmbedLoadListener(function (ev) {
-          log("Got embed load event, start live updates");
+          log("Got embed load event");
           pauseScheduleUpdate();
           startScheduleUpdate();
         });
@@ -166,7 +166,7 @@
         // both classic and embed modes for pageSelected
         ui.editor.addListener(undefined, function(editor, ev) {
           if (ev.name == "fileLoaded" || ev.name == "pageSelected") {
-            log("Got " + ev.name + " event, start live updates");
+            log("Got " + ev.name + " event");
             pauseScheduleUpdate();
             startScheduleUpdate();
           }
@@ -944,6 +944,7 @@
 
     /** Starts update process */
     function startScheduleUpdate() {
+      log("Start live updates");
       if (live.thread !== null) {
         log("live thread already running, thread id: " + live.thread);
         return;
